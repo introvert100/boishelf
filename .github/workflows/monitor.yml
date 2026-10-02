@@ -1,0 +1,19 @@
+name: Store availability
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 */6 * * *"
+permissions:
+  contents: read
+jobs:
+  health:
+    if: vars.PRODUCTION_MONITOR_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Check production dependencies
+        env:
+          STORE_URL: ${{ vars.STORE_URL }}
+          MONITOR_TOKEN: ${{ secrets.MONITOR_TOKEN }}
+        run: |
+          curl --fail --silent --show-error --max-time 60 --retry 2 --header "Authorization: Bearer $MONITOR_TOKEN" "$STORE_URL/api/health/ready"

@@ -1,0 +1,47 @@
+# yaml-language-server: $schema=https://render.com/schema/render.yaml.json
+services:
+  - type: web
+    name: boishelf
+    runtime: node
+    plan: free
+    region: singapore
+    branch: main
+    buildCommand: npm ci && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/health
+    autoDeployTrigger: checksPass
+    envVars:
+      - key: NODE_VERSION
+        value: 24.15.0
+      - key: NODE_ENV
+        value: production
+      - key: NEXT_PUBLIC_APP_URL
+        sync: false
+      - key: NEXT_PUBLIC_SUPABASE_URL
+        sync: false
+      - key: NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
+        sync: false
+      - key: SUPABASE_SECRET_KEY
+        sync: false
+      - key: ADMIN_EMAIL
+        sync: false
+      - key: PAYMENT_MODE
+        value: sandbox
+      - key: SSLCOMMERZ_SANDBOX_STORE_ID
+        sync: false
+      - key: SSLCOMMERZ_SANDBOX_STORE_PASSWORD
+        sync: false
+      - key: LIVE_PAYMENTS_ENABLED
+        value: "false"
+      - key: MERCHANT_APPROVED
+        value: "false"
+      - key: PAID_HOSTING_CONFIRMED
+        value: "false"
+      - key: LIVE_PAYMENT_TESTS_CONFIRMED
+        value: "false"
+      - key: LIVE_PAYMENT_TEST_MODE
+        value: "false"
+      - key: MONITOR_TOKEN
+        generateValue: true
+      - key: SUPPORT_EMAIL
+        sync: false

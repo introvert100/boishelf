@@ -1,0 +1,326 @@
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { PGlite } from "@electric-sql/pglite";
+import { readFileSync, readdirSync } from "node:fs";
+const reader = "11111111-1111-4111-8111-111111111111",
+  other = "22222222-2222-4222-8222-222222222222",
+  book = "33333333-3333-4333-8333-333333333333";
+test("PostgreSQL migration, access policies and atomic payment transitions", async (t) => {
+  const db = new PGlite();
+  await db.exec(
+    `create role anon; create role authenticated; create role service_role bypassrls; create role supabase_auth_admin; create schema auth; create schema storage; grant usage on schema public,auth to anon,authenticated,service_role,supabase_auth_admin; create table auth.users(id uuid primary key,email text); create function auth.uid() returns uuid language sql stable as $$ select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid $$; create table storage.buckets(id text primary key,name text,public boolean,file_size_limit bigint,allowed_mime_types text[]);`,
+  );
+  for (const path of readdirSync("supabase/migrations")
+    .filter((x) => x.endsWith(".sql"))
+    .sort())
+    await db.exec(readFileSync(`supabase/migrations/${path}`, "utf8"));
+  await db.query(
+    "insert into auth.users(id,email) values($1,'reader@gmail.com'),($2,'other@gmail.com')",
+    [reader, other],
+  );
+  await db.query(
+    "insert into books(id,slug,title_bn,title_en,author_bn,author_en,description_bn,description_en,category,price_paisa,pages,published) values($1,'real-book','বই','Real book','লেখক','Author','বিবরণ','Description','fiction',24900,100,true)",
+    [book],
+  );
+  await db.query(
+    "insert into book_formats(book_id,format,storage_path,original_name,size_bytes) values($1,'pdf','private/sample.pdf','book.pdf',100)",
+    [book],
+  );
+  async function asRole<T>(
+    role: string,
+    user: string | null,
+    work: () => Promise<T>,
+  ): Promise<T> {
+    await db.exec(`begin;set local role ${role};`);
+    if (user)
+      await db.query("select set_config('request.jwt.claim.sub',$1,true)", [
+        user,
+      ]);
+    try {
+      const result = await work();
+      await db.exec("rollback");
+      return result;
+    } catch (e) {
+      await db.exec("rollback");
+      throw e;
+    }
+  }
+  let order: {
+    id: string;
+    tran_id: string;
+    amount_paisa: number;
+    reused: boolean;
+  };
+  await t.test("all eight public tables have RLS", async () => {
+    const { rows } = await db.query<{
+      relname: string;
+      relrowsecurity: boolean;
+    }>(
+      "select relname,relrowsecurity from pg_class join pg_namespace on pg_namespace.oid=relnamespace where nspname='public' and relkind='r'",
+    );
+    assert.equal(rows.length, 8);
+    assert.ok(rows.every((r) => r.relrowsecurity));
+  });
+  await t.test(
+    "anonymous readers see published books but cannot write or read file paths",
+    async () => {
+      await asRole("anon", null, async () => {
+        assert.equal((await db.query("select * from books")).rows.length, 1);
+      });
+      await assert.rejects(
+        asRole("anon", null, () =>
+          db.query("select storage_path from book_formats"),
+        ),
+      );
+      await assert.rejects(
+        asRole("anon", null, () =>
+          db.query("update books set price_paisa=1000"),
+        ),
+      );
+      await assert.rejects(
+        asRole("anon", null, () => db.query("select * from orders")),
+      );
+    },
+  );
+  await t.test(
+    "customers cannot call privileged payment functions or edit their profile",
+    async () => {
+      await assert.rejects(
+        asRole("authenticated", reader, () =>
+          db.query("select create_order($1,$2,'sandbox')", [reader, book]),
+        ),
+      );
+      await assert.rejects(
+        asRole("authenticated", reader, () =>
+          db.query("update profiles set email='attacker@gmail.com'"),
+        ),
+      );
+      await assert.rejects(
+        asRole("authenticated", reader, () =>
+          db.query("select * from payment_attempts"),
+        ),
+      );
+    },
+  );
+  await t.test(
+    "order price is taken from catalogue; concurrent retries reuse pending order",
+    async () => {
+      order = (
+        await db.query<{ v: typeof order }>(
+          "select create_order($1,$2,'sandbox') as v",
+          [reader, book],
+        )
+      ).rows[0].v;
+      assert.equal(order.amount_paisa, 24900);
+      assert.equal(order.reused, false);
+      const retry = (
+        await db.query<{ v: typeof order }>(
+          "select create_order($1,$2,'sandbox') as v",
+          [reader, book],
+        )
+      ).rows[0].v;
+      assert.equal(retry.id, order.id);
+      assert.equal(retry.reused, true);
+    },
+  );
+  await t.test("customer records are isolated by RLS", async () => {
+    assert.equal(
+      await asRole(
+        "authenticated",
+        reader,
+        async () => (await db.query("select * from orders")).rows.length,
+      ),
+      1,
+    );
+    assert.equal(
+      await asRole(
+        "authenticated",
+        other,
+        async () => (await db.query("select * from orders")).rows.length,
+      ),
+      0,
+    );
+    assert.equal(
+      await asRole(
+        "authenticated",
+        other,
+        async () => (await db.query("select * from profiles")).rows.length,
+      ),
+      1,
+    );
+  });
+  await t.test("failed and cancelled attempts grant no access", async () => {
+    await db.query("select mark_order_unsuccessful($1,'cancelled')", [
+      order.id,
+    ]);
+    assert.equal((await db.query("select * from entitlements")).rows.length, 0);
+  });
+  await t.test(
+    "tampered amount and sandbox/live mismatches roll back",
+    async () => {
+      await assert.rejects(
+        db.query("select settle_order($1,'sandbox',$2,1,'v1','b1','paid')", [
+          order.id,
+          order.tran_id,
+        ]),
+      );
+      await assert.rejects(
+        db.query("select settle_order($1,'live',$2,24900,'v1','b1','paid')", [
+          order.id,
+          order.tran_id,
+        ]),
+      );
+      assert.equal(
+        (await db.query("select * from entitlements")).rows.length,
+        0,
+      );
+    },
+  );
+  await t.test(
+    "risky payment stays under review without downloads",
+    async () => {
+      await db.query(
+        "select settle_order($1,'sandbox',$2,24900,'v1','b1','review')",
+        [order.id, order.tran_id],
+      );
+      assert.equal(
+        (await db.query("select * from entitlements")).rows.length,
+        0,
+      );
+    },
+  );
+  await t.test(
+    "late verified payment settles exactly once and cannot be downgraded",
+    async () => {
+      for (let i = 0; i < 2; i++)
+        await db.query(
+          "select settle_order($1,'sandbox',$2,24900,'v1','b1','paid')",
+          [order.id, order.tran_id],
+        );
+      await db.query("select mark_order_unsuccessful($1,'failed')", [order.id]);
+      assert.equal(
+        (
+          await db.query<{ status: string }>(
+            "select status from orders where id=$1",
+            [order.id],
+          )
+        ).rows[0].status,
+        "paid",
+      );
+      assert.equal(
+        (await db.query("select * from entitlements")).rows.length,
+        1,
+      );
+      assert.equal(
+        await asRole(
+          "authenticated",
+          other,
+          async () =>
+            (await db.query("select * from entitlements")).rows.length,
+        ),
+        0,
+      );
+    },
+  );
+  await t.test("sandbox entitlement does not buy the live book", async () => {
+    await assert.rejects(
+      db.query("select create_order($1,$2,'sandbox')", [reader, book]),
+    );
+    const live = (
+      await db.query<{ v: typeof order }>(
+        "select create_order($1,$2,'live') as v",
+        [reader, book],
+      )
+    ).rows[0].v;
+    assert.notEqual(live.id, order.id);
+    assert.equal(
+      (await db.query("select * from entitlements where mode='live'")).rows
+        .length,
+      0,
+    );
+  });
+  await t.test(
+    "same provider transaction cannot settle a second order",
+    async () => {
+      const second = (
+        await db.query<{ v: typeof order }>(
+          "select create_order($1,$2,'sandbox') as v",
+          [other, book],
+        )
+      ).rows[0].v;
+      await assert.rejects(
+        db.query(
+          "select settle_order($1,'sandbox',$2,24900,'v1','b1','paid')",
+          [second.id, second.tran_id],
+        ),
+      );
+      assert.equal(
+        (
+          await db.query<{ status: string }>(
+            "select status from orders where id=$1",
+            [second.id],
+          )
+        ).rows[0].status,
+        "pending",
+      );
+    },
+  );
+  await t.test(
+    "unpublished books disappear from the public catalogue",
+    async () => {
+      await db.query("update books set published=false where id=$1", [book]);
+      assert.equal(
+        await asRole(
+          "anon",
+          null,
+          async () => (await db.query("select * from books")).rows.length,
+        ),
+        0,
+      );
+    },
+  );
+  await t.test(
+    "Gmail hook rejects alternate providers and work accounts",
+    async () => {
+      for (const [email, provider, allowed] of [
+        ["reader@gmail.com", "google", true],
+        ["reader@company.com", "google", false],
+        ["reader@gmail.com", "email", false],
+      ] as const) {
+        const result = (
+          await db.query<{ v: { error?: unknown } }>(
+            "select before_user_created_hook($1::jsonb) as v",
+            [JSON.stringify({ user: { email, app_metadata: { provider } } })],
+          )
+        ).rows[0].v;
+        assert.equal(!result.error, allowed);
+      }
+    },
+  );
+  await t.test("rate limits persist and reject excess calls", async () => {
+    assert.equal(
+      (
+        await db.query<{ v: boolean }>(
+          "select consume_rate_limit('test',1,60) as v",
+        )
+      ).rows[0].v,
+      true,
+    );
+    assert.equal(
+      (
+        await db.query<{ v: boolean }>(
+          "select consume_rate_limit('test',1,60) as v",
+        )
+      ).rows[0].v,
+      false,
+    );
+  });
+  await t.test("file buckets are private", async () => {
+    const { rows } = await db.query<{ public: boolean }>(
+      "select public from storage.buckets",
+    );
+    assert.equal(rows.length, 2);
+    assert.ok(rows.every((row) => !row.public));
+  });
+  await db.close();
+});
