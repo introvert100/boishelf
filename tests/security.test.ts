@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   isGmailUser,
+  hasEmailOtpClaim,
   safeReturnTo,
   moneyToPaisa,
   isGatewayUrl,
@@ -20,48 +21,20 @@ const user = {
   user_metadata: {},
   email: "reader@gmail.com",
   email_confirmed_at: "2026-01-01",
-  app_metadata: { provider: "google" },
-  identities: [
-    {
-      id: "identity",
-      identity_id: "identity",
-      user_id: "reader",
-      created_at: "2026-01-01",
-      provider: "google",
-      identity_data: { email: "reader@gmail.com", email_verified: true },
-    },
-  ],
+  app_metadata: { provider: "email" },
 } as User;
-test("only confirmed Gmail Google identities are accepted", () => {
+test("only confirmed Gmail addresses are accepted", () => {
   assert.equal(isGmailUser(user), true);
   assert.equal(isGmailUser({ ...user, email: "reader@company.com" }), false);
   assert.equal(isGmailUser({ ...user, email_confirmed_at: undefined }), false);
-  assert.equal(isGmailUser({ ...user, identities: [] }), false);
-  assert.equal(
-    isGmailUser({
-      ...user,
-      identities: [
-        {
-          ...user.identities![0],
-          identity_data: { email: "attacker@gmail.com", email_verified: true },
-        },
-      ],
-    }),
-    false,
-  );
-  assert.equal(
-    isGmailUser({
-      ...user,
-      identities: [
-        {
-          ...user.identities![0],
-          identity_data: { email: user.email, email_verified: false },
-        },
-      ],
-    }),
-    false,
-  );
   assert.equal(isGmailUser(null), false);
+});
+test("protected sessions require an email OTP authentication method", () => {
+  assert.equal(hasEmailOtpClaim({ amr: [{ method: "otp" }] }), true);
+  assert.equal(hasEmailOtpClaim({ amr: ["otp"] }), true);
+  assert.equal(hasEmailOtpClaim({ amr: [{ method: "password" }] }), false);
+  assert.equal(hasEmailOtpClaim({ amr: [{ method: "oauth" }] }), false);
+  assert.equal(hasEmailOtpClaim(null), false);
 });
 test("return paths cannot redirect to external domains", () => {
   for (const value of [

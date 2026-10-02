@@ -24,24 +24,28 @@ Set `.env.local` or Render environment variables:
 | `NEXT_PUBLIC_SUPABASE_URL`             | Project URL                                                      |
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Publishable API key                                              |
 | `SUPABASE_SECRET_KEY`                  | Secret API key (legacy service-role key also works)              |
+| `NEXT_PUBLIC_TURNSTILE_SITE_KEY`       | Public Cloudflare Turnstile site key                             |
 | `NEXT_PUBLIC_APP_URL`                  | Exact app origin, no trailing path                               |
 | `ADMIN_EMAIL`                          | Your exact verified Gmail address; blank disables administration |
 
 The public key and project URL are intentionally public. Never expose the secret key through a `NEXT_PUBLIC_` variable.
 
-## 2. Google-only sign-in
+## 2. Card-free Gmail code sign-in
 
-In Google Cloud, create a Web application OAuth client and configure its consent screen. Register the Supabase callback displayed in the project's Google provider settings, normally `https://PROJECT.supabase.co/auth/v1/callback`. Put the Google client ID and secret **in Supabase Auth's Google provider settings**, not in the browser or repository.
+The store uses six-digit email OTPs. It does not need Google Cloud, OAuth credentials, passwords or a credit card. Supabase's default mailer is limited to project-team addresses and is not suitable for customers, so configure Brevo SMTP before public testing.
 
-In Supabase Auth:
+1. Create a free account at `https://www.brevo.com/products/transactional-email/`. The free plan allows up to 300 messages daily. Complete Brevo's account and sender verification.
+2. In Brevo open **Transactional → Settings → Configuration → SMTP & API**. Create an SMTP key and keep the SMTP server, port, login and key private.
+3. In Supabase open **Project Settings → Authentication → SMTP Settings**. Enable custom SMTP and enter the Brevo values. Use the verified Brevo sender address and `BoiShelf` as the sender name.
+4. In **Authentication → Email Templates → Magic Link**, use a short template containing `{{ .Token }}` (for example, `<p>Your BoiShelf login code is: <strong>{{ .Token }}</strong></p>`). Do not include `{{ .ConfirmationURL }}`, because that produces a magic link instead of the six-digit code.
+5. In **Authentication → Sign In / Providers**, enable Email with confirmed email required. Disable Phone, Anonymous and every external provider. Do not add any password form, recovery flow or email-change UI.
+6. In **Authentication → URL Configuration**, set Site URL to the exact Render origin. No OAuth callback URL is required.
+7. In **Authentication → Hooks**, enable **Before User Created** → PostgreSQL → `public.before_user_created_hook`, then enable **Custom Access Token** → PostgreSQL → `public.gmail_otp_access_token_hook`. The first hook rejects non-Gmail registration; the second rejects password, OAuth, anonymous and recovery sessions.
+8. Create a free Turnstile site at `https://dash.cloudflare.com/`. Add the Render hostname. Put the public site key in Render as `NEXT_PUBLIC_TURNSTILE_SITE_KEY`.
+9. In Supabase open **Authentication → Bot and Abuse Protection**, enable CAPTCHA, select Cloudflare Turnstile and enter the private Turnstile secret. Never put this secret in Render or the repository.
+10. Sign in with `ADMIN_EMAIL`, enter the emailed code, then open `/admin`. No first-user promotion or client-editable role exists.
 
-1. Enable Google and disable Email, Phone, anonymous sign-ins, manual identity linking, and all other providers. Disable email changes for the app's supported account flows; do not expose profile email updates.
-2. Set Site URL to the app origin. Add the exact application callback `https://YOUR-APP/auth/callback` to the redirect allowlist (and `http://localhost:3000/auth/callback` for local development). The `next` query parameter carries only an app-relative return path.
-3. Under Auth Hooks, enable **Before User Created** → PostgreSQL → `public.before_user_created_hook`. The hook rejects non-Gmail and non-Google registrations. The application independently verifies Google identity, confirmed email and Gmail domain on each protected request.
-4. Use the Google consent screen's test-user list while in OAuth testing mode. Move the OAuth app to the appropriate published status before the public launch.
-5. Sign in using `ADMIN_EMAIL`, then open `/admin`. No first-user promotion or client-editable role exists.
-
-Local Supabase config includes the Gmail hook and disables email signup. Google local-stack settings require your own OAuth credentials; configure the Google provider if you choose to run the full local Supabase stack. Hosted Dashboard settings are separate from `supabase/config.toml` and must be configured explicitly.
+Local Supabase configuration enables confirmed email OTP, both database hooks and Mailpit for test messages. Hosted Dashboard settings remain separate and must be configured explicitly.
 
 ## 3. SSLCOMMERZ sandbox
 
@@ -73,11 +77,11 @@ The script uploads real PDF/EPUB sample files to private storage and inserts cle
 3. Connect that repository to Render and create a Blueprint from `render.yaml`. Select the free service in Singapore. The Blueprint does not create a Render database; all durable state is in Supabase.
 4. Enter the environment variables marked `sync: false`. For a catalogue-only preview, credentials can remain unconfigured, but real authentication/checkout require them. Use the assigned `https://NAME.onrender.com` origin for `NEXT_PUBLIC_APP_URL` and update Supabase's redirect settings to match.
 5. Render runs `npm ci && npm run build`, starts on `0.0.0.0:$PORT`, and checks `/api/health`. `autoDeployTrigger: checksPass` waits for GitHub checks before deploying commits on `main`.
-6. Confirm a live deploy, HTTP 200 health response, catalogue loading, Google login, and an actual SSLCOMMERZ sandbox purchase/download. Review Render logs for callback or download failures.
+6. Confirm a live deploy, HTTP 200 health response, Gmail code delivery and login, and an actual SSLCOMMERZ sandbox purchase/download. Review Render logs for authentication, callback or download failures.
 
 Render's free web service can spin down; its filesystem is ephemeral. Never store uploaded ebooks or authoritative records on Render disk. Supabase's free quotas and inactivity behavior also need review. Free service limits are suitable for this chosen pilot, not a reliability guarantee for paid customers.
 
-Official references: [Render free services](https://render.com/docs/free), [Render Blueprints](https://render.com/docs/blueprint-spec), [Supabase Google sign-in](https://supabase.com/docs/guides/auth/social-login/auth-google), [Supabase auth hooks](https://supabase.com/docs/guides/auth/auth-hooks/before-user-created-hook), [SSLCOMMERZ integration](https://developer.sslcommerz.com/doc/v4/).
+Official references: [Render free services](https://render.com/docs/free), [Render Blueprints](https://render.com/docs/blueprint-spec), [Supabase email OTP](https://supabase.com/docs/guides/auth/auth-email-passwordless), [Supabase SMTP](https://supabase.com/docs/guides/auth/auth-smtp), [Supabase CAPTCHA](https://supabase.com/docs/guides/auth/auth-captcha), [Brevo free transactional email](https://www.brevo.com/products/transactional-email/), [SSLCOMMERZ integration](https://developer.sslcommerz.com/doc/v4/).
 
 ## 5. Real-payment launch gates
 
@@ -97,7 +101,7 @@ The paid-hosting and merchant flags are owner attestations; the app cannot indep
 
 ## 6. Acceptance checklist
 
-- Google login works on mobile/desktop; non-Gmail/workspace Google accounts are rejected; sign-out and session expiry close access.
+- Gmail code login works on mobile/desktop; non-Gmail, password and non-OTP sessions are rejected; expired/incorrect codes fail; sign-out and session expiry close access.
 - Two different customers cannot read one another's orders or signed download links through the app.
 - A paid customer downloads both PDF and EPUB; an unpaid customer cannot. Direct storage paths remain private.
 - Amount/currency/transaction tampering is rejected, duplicate callbacks are harmless, and an unverified return page never unlocks a book.

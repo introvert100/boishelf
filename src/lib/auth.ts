@@ -1,7 +1,7 @@
 import "server-only";
 import { cache } from "react";
 import { sessionClient } from "./supabase";
-import { isGmailUser } from "./security";
+import { hasEmailOtpClaim, isGmailUser } from "./security";
 import { ownerEmail } from "./config";
 import { AppError } from "./http";
 export const currentUser = cache(async () => {
@@ -11,7 +11,14 @@ export const currentUser = cache(async () => {
     data: { user },
     error,
   } = await client.auth.getUser();
-  if (error || !isGmailUser(user)) return null;
+  const { data: claimData, error: claimError } = await client.auth.getClaims();
+  if (
+    error ||
+    claimError ||
+    !isGmailUser(user) ||
+    !hasEmailOtpClaim(claimData?.claims || null)
+  )
+    return null;
   return user;
 });
 export async function requireUser() {

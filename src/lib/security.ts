@@ -1,22 +1,18 @@
 import type { User } from "@supabase/supabase-js";
 export function isGmailUser(
-  user: Pick<
-    User,
-    "email" | "email_confirmed_at" | "identities" | "app_metadata"
-  > | null,
+  user: Pick<User, "email" | "email_confirmed_at"> | null,
 ): boolean {
-  if (
-    !user?.email_confirmed_at ||
-    !user.email ||
-    !/^[^@\s]+@gmail\.com$/i.test(user.email)
-  )
-    return false;
-  return !!user.identities?.some(
-    (identity) =>
-      identity.provider === "google" &&
-      identity.identity_data?.email?.toLowerCase() ===
-        user.email!.toLowerCase() &&
-      identity.identity_data?.email_verified === true,
+  return !!(
+    user?.email_confirmed_at &&
+    user.email &&
+    /^[^@\s]+@gmail\.com$/i.test(user.email)
+  );
+}
+export function hasEmailOtpClaim(claims: {
+  amr?: Array<string | { method?: string }>;
+} | null): boolean {
+  return !!claims?.amr?.some((entry) =>
+    typeof entry === "string" ? entry === "otp" : entry.method === "otp",
   );
 }
 export function safeReturnTo(value: string | null): string {

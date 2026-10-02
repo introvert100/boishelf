@@ -280,12 +280,12 @@ test("PostgreSQL migration, access policies and atomic payment transitions", asy
     },
   );
   await t.test(
-    "Gmail hook rejects alternate providers and work accounts",
+    "Gmail hook permits email codes and rejects alternate providers and domains",
     async () => {
       for (const [email, provider, allowed] of [
-        ["reader@gmail.com", "google", true],
-        ["reader@company.com", "google", false],
-        ["reader@gmail.com", "email", false],
+        ["reader@gmail.com", "email", true],
+        ["reader@company.com", "email", false],
+        ["reader@gmail.com", "google", false],
       ] as const) {
         const result = (
           await db.query<{ v: { error?: unknown } }>(
@@ -297,6 +297,35 @@ test("PostgreSQL migration, access policies and atomic payment transitions", asy
       }
     },
   );
+  await t.test("access-token hook rejects password sessions", async () => {
+    const claims = {
+      sub: reader,
+      email: "reader@gmail.com",
+      amr: [{ method: "otp" }],
+    };
+    for (const method of ["otp", "token_refresh"]) {
+      const result = (
+        await db.query<{ v: { claims: unknown } }>(
+          "select gmail_otp_access_token_hook($1::jsonb) as v",
+          [JSON.stringify({ authentication_method: method, claims })],
+        )
+      ).rows[0].v;
+      assert.deepEqual(result.claims, claims);
+    }
+    await assert.rejects(() =>
+      db.query("select gmail_otp_access_token_hook($1::jsonb)", [
+        JSON.stringify({ authentication_method: "password", claims }),
+      ]),
+    );
+    await assert.rejects(() =>
+      db.query("select gmail_otp_access_token_hook($1::jsonb)", [
+        JSON.stringify({
+          authentication_method: "token_refresh",
+          claims: { ...claims, amr: [{ method: "password" }] },
+        }),
+      ]),
+    );
+  });
   await t.test("rate limits persist and reject excess calls", async () => {
     assert.equal(
       (

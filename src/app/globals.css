@@ -1071,17 +1071,81 @@ html[lang="en"] .cover-title {
   font-size: 12px;
   color: var(--muted);
 }
-.google-button {
+.auth-form {
+  margin-top: 22px;
+  text-align: left;
+}
+.auth-form label {
+  display: block;
+  margin-bottom: 7px;
+  color: #405247;
+  font-size: 13px;
+  font-weight: 700;
+}
+.auth-input {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 0 13px;
+  margin-bottom: 15px;
+  border: 1px solid #ccd8ce;
+  border-radius: 8px;
+  color: var(--muted);
   background: white;
+}
+.auth-input:focus-within {
+  border-color: var(--green);
+  box-shadow: 0 0 0 3px #174b3520;
+}
+.auth-input input {
+  width: 100%;
+  border: 0;
+  outline: 0;
+  padding: 12px 0;
+  background: transparent;
   color: var(--ink);
-  border-color: var(--line);
+  font: inherit;
 }
-.google-button:hover {
-  color: white;
+.auth-input input#signin-code {
+  font-size: 21px;
+  font-weight: 700;
+  letter-spacing: 0.22em;
 }
-.google-g {
-  font: 700 20px Arial;
-  color: #4285f4;
+.turnstile {
+  min-height: 65px;
+  display: flex;
+  justify-content: center;
+  margin: 8px 0 14px;
+}
+.code-sent {
+  padding: 10px 12px;
+  margin: 0 0 18px;
+  border-radius: 7px;
+  background: var(--pale);
+  color: var(--green);
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+.auth-secondary-actions {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 12px;
+}
+.text-button {
+  border: 0;
+  padding: 5px 0;
+  background: transparent;
+  color: var(--green);
+  font: inherit;
+  font-size: 12px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.text-button:disabled {
+  color: var(--muted);
+  cursor: not-allowed;
 }
 .text-link {
   font-size: 13px;

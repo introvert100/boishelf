@@ -32,9 +32,14 @@ import {
   LoaderCircle,
   LockKeyhole,
   Smartphone,
+  Mail,
+  KeyRound,
 } from "lucide-react";
 import type { Book, Locale, Viewer, Order, Policy } from "@/lib/types";
 import { categories } from "@/lib/demo";
+import { browserClient } from "@/lib/supabase-browser";
+import { isGmailUser } from "@/lib/security";
+import { Turnstile } from "@/components/turnstile";
 
 const Language = createContext<{
   locale: Locale;
@@ -233,8 +238,8 @@ export function Shell({
         {!configured && (
           <div className="setup-note">
             {t(
-              "নমুনা ক্যাটালগ · Google লগইন ও পেমেন্ট এখনো সংযুক্ত নয়",
-              "Sample catalogue · Google sign-in and payments are not connected yet",
+              "নমুনা ক্যাটালগ · Gmail কোড লগইন ও পেমেন্ট এখনো সংযুক্ত নয়",
+              "Sample catalogue · Gmail code sign-in and payments are not connected yet",
             )}
           </div>
         )}
@@ -637,16 +642,98 @@ export function SignIn({
   error?: string;
 }) {
   const { t } = useLanguage();
-  const errors: Record<string, [string, string]> = {
-    gmail: [
+  const siteKey = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || "";
+  const ready = configured && !!siteKey;
+  const [step, setStep] = useState<"email" | "code">("email");
+  const [email, setEmail] = useState("");
+  const [code, setCode] = useState("");
+  const [captchaToken, setCaptchaToken] = useState("");
+  const [captchaReset, setCaptchaReset] = useState(0);
+  const [cooldown, setCooldown] = useState(0);
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState(error ? "send" : "");
+  const messages: Record<string, [string, string]> = {
+    invalid: [
       "শুধু যাচাইকৃত @gmail.com অ্যাকাউন্ট ব্যবহার করুন।",
       "Please use a verified @gmail.com account.",
     ],
-    oauth: [
-      "লগইন সম্পন্ন হয়নি। আবার চেষ্টা করুন।",
-      "Sign-in wasn’t completed. Please try again.",
+    captcha: [
+      "নিরাপত্তা যাচাই সম্পন্ন করুন।",
+      "Please complete the security check.",
+    ],
+    send: [
+      "কোড পাঠানো যায়নি। একটু পরে আবার চেষ্টা করুন।",
+      "We could not send the code. Please try again shortly.",
+    ],
+    code: [
+      "কোডটি সঠিক নয়। ছয় সংখ্যার কোডটি আবার লিখুন।",
+      "That code is not valid. Enter the six-digit code again.",
+    ],
+    expired: [
+      "কোডটির মেয়াদ শেষ হয়েছে। নতুন কোড নিন।",
+      "That code has expired. Request a new one.",
     ],
   };
+
+  useEffect(() => {
+    if (!cooldown) return;
+    const timer = window.setInterval(
+      () => setCooldown((value) => Math.max(0, value - 1)),
+      1000,
+    );
+    return () => window.clearInterval(timer);
+  }, [cooldown]);
+
+  async function sendCode() {
+    const normalized = email.trim().toLowerCase();
+    if (!/^[^@\s]+@gmail\.com$/.test(normalized)) {
+      setMessage("invalid");
+      return;
+    }
+    if (!captchaToken) {
+      setMessage("captcha");
+      return;
+    }
+    setBusy(true);
+    setMessage("");
+    const { error: sendError } = await browserClient().auth.signInWithOtp({
+      email: normalized,
+      options: { shouldCreateUser: true, captchaToken },
+    });
+    setCaptchaToken("");
+    setCaptchaReset((value) => value + 1);
+    setBusy(false);
+    if (sendError) {
+      setMessage("send");
+      return;
+    }
+    setEmail(normalized);
+    setCode("");
+    setCooldown(60);
+    setStep("code");
+  }
+
+  async function verifyCode() {
+    if (!/^\d{6}$/.test(code)) {
+      setMessage("code");
+      return;
+    }
+    setBusy(true);
+    setMessage("");
+    const { data, error: verifyError } = await browserClient().auth.verifyOtp({
+      email,
+      token: code,
+      type: "email",
+    });
+    if (verifyError || !isGmailUser(data.user)) {
+      if (data.session) await browserClient().auth.signOut();
+      setBusy(false);
+      setMessage(verifyError?.code?.includes("expired") ? "expired" : "code");
+      return;
+    }
+    window.location.assign(returnTo);
+  }
+
   return (
     <div className="container auth-page">
       <div className="auth-card">
@@ -659,36 +746,139 @@ export function SignIn({
         </h1>
         <p>
           {t(
-            "বই কিনতে এবং আপনার লাইব্রেরিতে ফিরতে Gmail দিয়ে লগইন করুন।",
-            "Sign in with Gmail to buy a book or pick up where you left off.",
+            "Gmail-এ পাঠানো একবারের কোড দিয়ে নিরাপদে লগইন করুন।",
+            "Sign in securely with a one-time code sent to your Gmail.",
           )}
         </p>
-        {error && (
+        {message && (
           <p className="notice error" role="alert">
-            {t(...(errors[error] || errors.oauth))}
+            {t(...messages[message])}
           </p>
         )}
-        {configured ? (
-          <a
-            className="button google-button wide"
-            href={`/auth/google?next=${encodeURIComponent(returnTo)}`}
-          >
-            <span className="google-g">G</span>
-            {t("Google দিয়ে চালিয়ে যান", "Continue with Google")}
-          </a>
+        {ready ? (
+          <div className="auth-form">
+            {step === "email" ? (
+              <form
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  void sendCode();
+                }}
+              >
+                <label htmlFor="signin-email">
+                  {t("Gmail ঠিকানা", "Gmail address")}
+                </label>
+                <div className="auth-input">
+                  <Mail size={18} />
+                  <input
+                    id="signin-email"
+                    type="email"
+                    autoComplete="email"
+                    inputMode="email"
+                    value={email}
+                    onChange={(event) => setEmail(event.target.value)}
+                    placeholder="name@gmail.com"
+                    required
+                  />
+                </div>
+                <Turnstile
+                  siteKey={siteKey}
+                  resetKey={captchaReset}
+                  onToken={setCaptchaToken}
+                />
+                <button
+                  className="button wide"
+                  type="submit"
+                  disabled={busy || !captchaToken}
+                >
+                  {busy
+                    ? t("কোড পাঠানো হচ্ছে…", "Sending code…")
+                    : t("লগইন কোড পাঠান", "Send login code")}
+                </button>
+              </form>
+            ) : (
+              <form
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  void verifyCode();
+                }}
+              >
+                <p className="code-sent">
+                  {t("কোড পাঠানো হয়েছে:", "Code sent to:")} <b>{email}</b>
+                </p>
+                <label htmlFor="signin-code">
+                  {t("ছয় সংখ্যার কোড", "Six-digit code")}
+                </label>
+                <div className="auth-input">
+                  <KeyRound size={18} />
+                  <input
+                    id="signin-code"
+                    type="text"
+                    inputMode="numeric"
+                    autoComplete="one-time-code"
+                    pattern="[0-9]{6}"
+                    maxLength={6}
+                    value={code}
+                    onChange={(event) =>
+                      setCode(event.target.value.replace(/\D/g, "").slice(0, 6))
+                    }
+                    placeholder="123456"
+                    required
+                    autoFocus
+                  />
+                </div>
+                <button className="button wide" type="submit" disabled={busy}>
+                  {busy
+                    ? t("যাচাই করা হচ্ছে…", "Verifying…")
+                    : t("যাচাই করে লগইন করুন", "Verify and sign in")}
+                </button>
+                <Turnstile
+                  siteKey={siteKey}
+                  resetKey={captchaReset}
+                  onToken={setCaptchaToken}
+                />
+                <div className="auth-secondary-actions">
+                  <button
+                    type="button"
+                    className="text-button"
+                    disabled={busy || cooldown > 0 || !captchaToken}
+                    onClick={() => void sendCode()}
+                  >
+                    {cooldown
+                      ? t(
+                          `${cooldown} সেকেন্ড পরে আবার পাঠান`,
+                          `Resend in ${cooldown}s`,
+                        )
+                      : t("নতুন কোড পাঠান", "Send a new code")}
+                  </button>
+                  <button
+                    type="button"
+                    className="text-button"
+                    disabled={busy}
+                    onClick={() => {
+                      setStep("email");
+                      setCode("");
+                      setMessage("");
+                    }}
+                  >
+                    {t("Gmail বদলান", "Change Gmail")}
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
         ) : (
           <div className="notice">
             <LockKeyhole size={19} />
             {t(
-              "Google লগইন এখনো সংযুক্ত হয়নি। এর মধ্যে নমুনা বইগুলো দেখতে পারেন।",
-              "Google sign-in is not connected yet. You can explore the sample collection in the meantime.",
+              "Gmail কোড লগইন এখনো সম্পূর্ণভাবে সংযুক্ত হয়নি। এর মধ্যে নমুনা বইগুলো দেখতে পারেন।",
+              "Gmail code sign-in is not fully connected yet. You can explore the sample collection in the meantime.",
             )}
           </div>
         )}
         <small>
           {t(
-            "শুধু যাচাইকৃত @gmail.com ঠিকানা",
-            "Verified @gmail.com addresses only",
+            "পাসওয়ার্ড লাগবে না · শুধু যাচাইকৃত @gmail.com ঠিকানা",
+            "No password needed · verified @gmail.com addresses only",
           )}
         </small>
         <Link className="text-link" href="/#catalogue">
@@ -761,7 +951,7 @@ export function Checkout({
                 className="button wide"
                 href={`/signin?next=${encodeURIComponent(`/checkout/${book.slug}`)}`}
               >
-                {t("Google দিয়ে লগইন", "Sign in with Google")}
+                {t("Gmail কোড দিয়ে লগইন", "Sign in with a Gmail code")}
               </Link>
             </>
           ) : (

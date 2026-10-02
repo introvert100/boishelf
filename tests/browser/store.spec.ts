@@ -43,7 +43,9 @@ test("unconfigured authentication and admin routes stay closed", async ({
   await expect(page).toHaveURL(/\/signin/);
   await page.getByRole("button", { name: "Switch to English" }).click();
   await expect(
-    page.getByText("Google sign-in is not connected yet.", { exact: false }),
+    page.getByText("Gmail code sign-in is not fully connected yet.", {
+      exact: false,
+    }),
   ).toBeVisible();
   expect(
     (

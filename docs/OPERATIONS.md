@@ -35,8 +35,8 @@ Before real sales, establish database backups and a **separate** Storage object 
 
 ## Security administration
 
-Keep Render, GitHub, Google and Supabase accounts protected with MFA. `ADMIN_EMAIL` is a server-side allowlist, not editable user metadata. To revoke owner access, clear/change that variable and redeploy. Google identity and confirmed Gmail are checked for admin and download requests on the server.
+Keep Render, GitHub, Supabase, Brevo and Cloudflare accounts protected with MFA. `ADMIN_EMAIL` is a server-side allowlist, not editable user metadata. To revoke owner access, clear/change that variable and redeploy. Confirmed Gmail and the OTP authentication method are checked for admin and download requests on the server.
 
 Rotate any exposed server or gateway credential in the provider dashboard immediately and update Render. The app stores provider secrets only in environment variables. Signed downloads expire after 60 seconds; session sign-out does not retroactively cancel a URL already issued during that window.
 
-Pin dependencies and commit the lockfile. CI tests unconfigured/sample mode without production secrets. Run live OAuth and gateway acceptance checks separately with real account access before marking the launch complete.
+Pin dependencies and commit the lockfile. CI tests unconfigured/sample mode without production secrets. Run live Gmail-code, SMTP, Turnstile and gateway acceptance checks separately with real account access before marking the launch complete.

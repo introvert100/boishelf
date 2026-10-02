@@ -18,7 +18,7 @@ Copy `.env.example` to `.env.local` and follow [the deployment guide](docs/DEPLO
 ## What is implemented
 
 - Bangla/English storefront, search, category and price filters, book details and checkout.
-- Google OAuth with server-verified Gmail identity; no email/password, phone, or guest checkout.
+- Passwordless Gmail codes with server-verified OTP sessions and Turnstile protection; no Google Cloud, password, phone, or guest checkout.
 - Supabase PostgreSQL schema and RLS policies for customers, books, orders and entitlements.
 - Private PDF/EPUB storage with purchase checks and 60-second signed download links.
 - `/admin` for the explicitly configured owner: draft/publish books, upload cover/PDF/EPUB files, inspect orders and publish the owner's policy text.
@@ -36,10 +36,10 @@ npx playwright install chromium
 npm run test:e2e
 ```
 
-`npm test` runs pure security/payment tests and executes the actual SQL migration against an isolated PostgreSQL-compatible PGlite instance, including real roles, RLS, stored procedures and transactional settlement. The database fixtures emulate Supabase's auth/storage schemas; they do not prove a hosted Supabase project's configuration. Browser checks use the unconfigured sample-catalogue mode; use a separate deployment for real OAuth/gateway acceptance tests.
+`npm test` runs pure security/payment tests and executes the actual SQL migrations against an isolated PostgreSQL-compatible PGlite instance, including real roles, RLS, stored procedures and transactional settlement. The database fixtures emulate Supabase's auth/storage schemas; they do not prove a hosted Supabase project's configuration. Browser checks use the unconfigured sample-catalogue mode; use a separate deployment for real email/SMTP/gateway acceptance tests.
 
 ## Launch status
 
 Local implementation is complete enough to connect and validate the external services. A production build alone does not mean the store is ready to accept real money. The live checklist and account requirements are in [DEPLOYMENT.md](docs/DEPLOYMENT.md); operations, reconciliation, backups and rollback are in [OPERATIONS.md](docs/OPERATIONS.md).
 
-Third-party live integration tests require your Supabase project, Google OAuth app and SSLCOMMERZ sandbox merchant account. Public deployment additionally requires a GitHub repository connected to Render. Final policies and commercial books must come from the owner.
+Third-party live integration tests require your Supabase project, Brevo SMTP account, Cloudflare Turnstile site and SSLCOMMERZ sandbox merchant account. Public deployment additionally requires a GitHub repository connected to Render. Final policies and commercial books must come from the owner.
