@@ -724,15 +724,14 @@ export function SignIn({
     let { data, error: verifyError } = await client.auth.verifyOtp({
       email,
       token: code,
-      type: "email",
+      type: "signup",
     });
-    // A first-time sign-in can be classified by Supabase as signup
-    // confirmation. Retry with that OTP type before showing an error.
+    // Returning users are classified as email OTP sessions.
     if (verifyError) {
       const retry = await client.auth.verifyOtp({
         email,
         token: code,
-        type: "signup",
+        type: "email",
       });
       data = retry.data;
       verifyError = retry.error;
