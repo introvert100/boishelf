@@ -7,6 +7,7 @@ import {
   useState,
   useEffect,
   useMemo,
+  useRef,
   type ReactNode,
 } from "react";
 import {
@@ -649,6 +650,7 @@ export function SignIn({
   const [code, setCode] = useState("");
   const [captchaToken, setCaptchaToken] = useState("");
   const [captchaReset, setCaptchaReset] = useState(0);
+  const verifying = useRef(false);
   const [cooldown, setCooldown] = useState(0);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState(error ? "send" : "");
@@ -714,29 +716,23 @@ export function SignIn({
   }
 
   async function verifyCode() {
+    if (verifying.current) return;
     if (!/^\d{6}$/.test(code)) {
       setMessage("code");
       return;
     }
+    verifying.current = true;
     setBusy(true);
     setMessage("");
     const client = browserClient();
-    // Supabase can issue passwordless emails as recovery, signup, or email
-    // OTPs depending on the account's current confirmation state.
-    let data;
-    let verifyError;
-    for (const type of ["recovery", "signup", "email"] as const) {
-      const attempt = await client.auth.verifyOtp({
-        email,
-        token: code,
-        type,
-      });
-      data = attempt.data;
-      verifyError = attempt.error;
-      if (!verifyError) break;
-    }
+    const { data, error: verifyError } = await client.auth.verifyOtp({
+      email,
+      token: code,
+      type: "email",
+    });
     if (verifyError || !isGmailUser(data.user)) {
       if (data.session) await browserClient().auth.signOut();
+      verifying.current = false;
       setBusy(false);
       setMessage(verifyError?.code?.includes("expired") ? "expired" : "code");
       return;
