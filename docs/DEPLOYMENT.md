@@ -32,12 +32,12 @@ The public key and project URL are intentionally public. Never expose the secret
 
 ## 2. Card-free Gmail code sign-in
 
-The store uses six-digit email OTPs. It does not need Google Cloud, OAuth credentials, passwords or a credit card. Supabase's default mailer is limited to project-team addresses and is not suitable for customers, so configure Brevo SMTP before public testing.
+The store uses eight-digit email OTPs. Set **Email OTP length** to `8` in Supabase to match the sign-in form. It does not need Google Cloud, OAuth credentials, passwords or a credit card. Supabase's default mailer is limited to project-team addresses and is not suitable for customers, so configure Brevo SMTP before public testing.
 
 1. Create a free account at `https://www.brevo.com/products/transactional-email/`. The free plan allows up to 300 messages daily. Complete Brevo's account and sender verification.
 2. In Brevo open **Transactional → Settings → Configuration → SMTP & API**. Create an SMTP key and keep the SMTP server, port, login and key private.
 3. In Supabase open **Project Settings → Authentication → SMTP Settings**. Enable custom SMTP and enter the Brevo values. Use the verified Brevo sender address and `BoiShelf` as the sender name.
-4. In **Authentication → Email Templates**, set **Magic Link**, **Confirm signup**, and **Reset password** to a short template containing `{{ .Token }}` (for example, `<p>Your BoiShelf login code is: <strong>{{ .Token }}</strong></p>`). Do not include `{{ .ConfirmationURL }}`, because that produces a magic link instead of the six-digit code.
+4. In **Authentication → Email Templates**, set **Magic Link**, **Confirm signup**, and **Reset password** to a short template containing `{{ .Token }}` (for example, `<p>Your BoiShelf login code is: <strong>{{ .Token }}</strong></p>`). Do not include `{{ .ConfirmationURL }}`, because that produces a magic link instead of the eight-digit code.
 5. In **Authentication → Sign In / Providers**, enable Email with confirmed email required. Disable Phone, Anonymous and every external provider. Do not add any password form, recovery flow or email-change UI.
 6. In **Authentication → URL Configuration**, set Site URL to the exact Render origin. No OAuth callback URL is required.
 7. In **Authentication → Hooks**, enable **Before User Created** → PostgreSQL → `public.before_user_created_hook`, then enable **Custom Access Token** → PostgreSQL → `public.gmail_otp_access_token_hook`. The first hook rejects non-Gmail registration; the second rejects password, OAuth, anonymous and recovery sessions.

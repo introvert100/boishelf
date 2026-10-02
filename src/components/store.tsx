@@ -668,8 +668,8 @@ export function SignIn({
       "We could not send the code. Please try again shortly.",
     ],
     code: [
-      "কোডটি সঠিক নয়। ছয় সংখ্যার কোডটি আবার লিখুন।",
-      "That code is not valid. Enter the six-digit code again.",
+      "কোডটি সঠিক নয়। আট সংখ্যার কোডটি আবার লিখুন।",
+      "That code is not valid. Enter the eight-digit code again.",
     ],
     expired: [
       "কোডটির মেয়াদ শেষ হয়েছে। নতুন কোড নিন।",
@@ -717,7 +717,7 @@ export function SignIn({
 
   async function verifyCode() {
     if (verifying.current) return;
-    if (!/^\d{6}$/.test(code)) {
+    if (!/^\d{8}$/.test(code)) {
       setMessage("code");
       return;
     }
@@ -812,7 +812,7 @@ export function SignIn({
                   {t("কোড পাঠানো হয়েছে:", "Code sent to:")} <b>{email}</b>
                 </p>
                 <label htmlFor="signin-code">
-                  {t("ছয় সংখ্যার কোড", "Six-digit code")}
+                  {t("আট সংখ্যার কোড", "Eight-digit code")}
                 </label>
                 <div className="auth-input">
                   <KeyRound size={18} />
@@ -821,13 +821,13 @@ export function SignIn({
                     type="text"
                     inputMode="numeric"
                     autoComplete="one-time-code"
-                    pattern="[0-9]{6}"
-                    maxLength={6}
+                    pattern="[0-9]{8}"
+                    maxLength={8}
                     value={code}
                     onChange={(event) =>
-                      setCode(event.target.value.replace(/\D/g, "").slice(0, 6))
+                      setCode(event.target.value.replace(/\D/g, "").slice(0, 8))
                     }
-                    placeholder="123456"
+                    placeholder="12345678"
                     required
                     autoFocus
                   />
