@@ -721,20 +721,19 @@ export function SignIn({
     setBusy(true);
     setMessage("");
     const client = browserClient();
-    let { data, error: verifyError } = await client.auth.verifyOtp({
-      email,
-      token: code,
-      type: "signup",
-    });
-    // Returning users are classified as email OTP sessions.
-    if (verifyError) {
-      const retry = await client.auth.verifyOtp({
+    // Supabase can issue passwordless emails as recovery, signup, or email
+    // OTPs depending on the account's current confirmation state.
+    let data;
+    let verifyError;
+    for (const type of ["recovery", "signup", "email"] as const) {
+      const attempt = await client.auth.verifyOtp({
         email,
         token: code,
-        type: "email",
+        type,
       });
-      data = retry.data;
-      verifyError = retry.error;
+      data = attempt.data;
+      verifyError = attempt.error;
+      if (!verifyError) break;
     }
     if (verifyError || !isGmailUser(data.user)) {
       if (data.session) await browserClient().auth.signOut();
