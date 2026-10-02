@@ -720,11 +720,23 @@ export function SignIn({
     }
     setBusy(true);
     setMessage("");
-    const { data, error: verifyError } = await browserClient().auth.verifyOtp({
+    const client = browserClient();
+    let { data, error: verifyError } = await client.auth.verifyOtp({
       email,
       token: code,
       type: "email",
     });
+    // A first-time sign-in can be classified by Supabase as signup
+    // confirmation. Retry with that OTP type before showing an error.
+    if (verifyError) {
+      const retry = await client.auth.verifyOtp({
+        email,
+        token: code,
+        type: "signup",
+      });
+      data = retry.data;
+      verifyError = retry.error;
+    }
     if (verifyError || !isGmailUser(data.user)) {
       if (data.session) await browserClient().auth.signOut();
       setBusy(false);
