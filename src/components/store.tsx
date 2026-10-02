@@ -671,10 +671,6 @@ export function SignIn({
       "কোডটি সঠিক নয়। আট সংখ্যার কোডটি আবার লিখুন।",
       "That code is not valid. Enter the eight-digit code again.",
     ],
-    expired: [
-      "কোডটির মেয়াদ শেষ হয়েছে। নতুন কোড নিন।",
-      "That code has expired. Request a new one.",
-    ],
   };
 
   useEffect(() => {
@@ -734,7 +730,9 @@ export function SignIn({
       if (data.session) await browserClient().auth.signOut();
       verifying.current = false;
       setBusy(false);
-      setMessage(verifyError?.code?.includes("expired") ? "expired" : "code");
+      // Supabase uses the same error for an expired token and a mismatched
+      // token, so never claim that a code expired based on the error code.
+      setMessage("code");
       return;
     }
     window.location.assign(returnTo);
