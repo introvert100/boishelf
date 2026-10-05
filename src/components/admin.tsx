@@ -1,56 +1,47 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   Plus,
-  Upload,
   CheckCircle2,
   Circle,
   LoaderCircle,
   Pencil,
-  X,
 } from "lucide-react";
 import { useLanguage, Price, statusLabel } from "./store";
-import { categories } from "@/lib/demo";
+import { BookEditor } from "./book-editor";
+import { draftKey, parseBookDraft, type BookFormValues } from "@/lib/book-draft";
 import type { Book, Order, Policy } from "@/lib/types";
 type Gate = { key: string; label: string; passed: boolean };
-const blank: Partial<Book> = {
-  title_bn: "",
-  title_en: "",
-  author_bn: "",
-  author_en: "",
-  description_bn: "",
-  description_en: "",
-  slug: "",
-  category: "fiction",
-  price_paisa: 19900,
-  pages: 100,
-  language: "bn",
-  cover_style: "forest",
-  published: false,
-  is_demo: false,
-  featured: false,
-};
 export function Admin({
   books,
   orders,
   policies,
   gates,
   mode,
+  ownerId,
 }: {
   books: Book[];
   orders: Order[];
   policies: Policy[];
   gates: Gate[];
   mode: string;
+  ownerId: string;
 }) {
   const { t, locale } = useLanguage();
   const router = useRouter();
   const [tab, setTab] = useState("books");
-  const [editing, setEditing] = useState<Partial<Book> | null>(null);
+  const [editing, setEditing] = useState<string | null>(null);
+  const [recentBook, setRecentBook] = useState<Book | null>(null);
+  const [savedDraft, setSavedDraft] = useState<BookFormValues | null>(null);
+  const [restoredDraft, setRestoredDraft] = useState<BookFormValues | null>(null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
+  useEffect(() => {
+    try { setSavedDraft(parseBookDraft(window.localStorage.getItem(draftKey(ownerId)))); }
+    catch { setSavedDraft(null); }
+  }, [ownerId]);
   async function send(url: string, body: unknown) {
     const res = await fetch(url, {
       method: "POST",
@@ -60,64 +51,6 @@ export function Admin({
     const result = await res.json();
     if (!res.ok) throw new Error(result.error);
     return result;
-  }
-  async function saveBook(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    if (!editing) return;
-    setBusy(true);
-    setError("");
-    setNotice("");
-    const f = new FormData(e.currentTarget);
-    const values = {
-      ...editing,
-      ...Object.fromEntries(f),
-      price_paisa: Math.round(Number(f.get("price")) * 100),
-      pages: Number(f.get("pages")),
-      published: f.get("published") === "on",
-      is_demo: f.get("is_demo") === "on",
-      featured: f.get("featured") === "on",
-    };
-    try {
-      const result = await send("/api/admin/books", values);
-      setEditing({ ...values, id: result.id } as Book);
-      setNotice(
-        t(
-          "বই সংরক্ষিত হয়েছে। এখন ফাইল আপলোড করতে পারেন।",
-          "Book saved. You can now upload its files.",
-        ),
-      );
-      router.refresh();
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  }
-  async function upload(kind: string, file?: File) {
-    if (!file || !editing?.id) return;
-    setBusy(true);
-    setError("");
-    setNotice("");
-    try {
-      const form = new FormData();
-      form.set("bookId", editing.id);
-      form.set("kind", kind);
-      form.set("file", file);
-      const response = await fetch("/api/admin/upload", {
-        method: "POST",
-        body: form,
-      });
-      const body = await response.json();
-      if (!response.ok) throw new Error(body.error);
-      setNotice(
-        `${kind.toUpperCase()} ${t("আপলোড হয়েছে", "uploaded successfully")}`,
-      );
-      router.refresh();
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setBusy(false);
-    }
   }
   async function savePolicy(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -151,7 +84,13 @@ export function Admin({
           <button
             className="button"
             onClick={() => {
-              setEditing({ ...blank });
+              if (savedDraft) {
+                setEditing(null);
+                setNotice(t("আগের খসড়া ফিরিয়ে আনুন অথবা মুছুন।", "Restore or discard the existing browser draft first."));
+                return;
+              }
+              setEditing("new");
+              setRestoredDraft(null);
               setNotice("");
               setError("");
             }}
@@ -210,191 +149,43 @@ export function Admin({
       )}
       {tab === "books" && (
         <>
-          {editing && (
-            <form className="panel admin-form" onSubmit={saveBook}>
-              <div className="admin-heading">
-                <h2>
-                  {editing.id
-                    ? t("বই সম্পাদনা", "Edit book")
-                    : t("নতুন বই", "New book")}
-                </h2>
-                <button
-                  type="button"
-                  className="icon-button"
-                  aria-label="Close editor"
-                  onClick={() => setEditing(null)}
-                >
-                  <X />
+          {savedDraft && !editing && (
+            <div className="notice draft-recovery" role="status">
+              <p>{t("এই ব্রাউজারে একটি অসম্পূর্ণ বইয়ের খসড়া আছে।", "An unsaved book draft is in this browser.")}</p>
+              <div className="form-actions">
+                <button className="button" type="button" onClick={() => { setRestoredDraft(savedDraft); setEditing("new"); setNotice(""); }}>
+                  {t("খসড়া ফিরিয়ে আনুন", "Restore draft")}
+                </button>
+                <button className="button secondary" type="button" onClick={() => {
+                  try { window.localStorage.removeItem(draftKey(ownerId)); } catch { /* Storage may be unavailable. */ }
+                  setSavedDraft(null); setRestoredDraft(null);
+                }}>
+                  {t("খসড়া মুছুন", "Discard draft")}
                 </button>
               </div>
-              <div className="form-grid">
-                {[
-                  ["title_bn", "বইয়ের নাম (বাংলা)"],
-                  ["title_en", "Title (English)"],
-                  ["author_bn", "লেখক (বাংলা)"],
-                  ["author_en", "Author (English)"],
-                  ["slug", "URL slug"],
-                ].map(([name, label]) => (
-                  <label key={`${editing.id || "new"}-${name}`}>
-                    {label}
-                    <input
-                      name={name}
-                      required
-                      defaultValue={String(editing[name as keyof Book] || "")}
-                    />
-                  </label>
-                ))}
-                <label>
-                  {t("মূল্য (টাকা)", "Price (BDT)")}
-                  <input
-                    key={`${editing.id}-price`}
-                    name="price"
-                    type="number"
-                    min="10"
-                    max="100000"
-                    step="0.01"
-                    required
-                    defaultValue={(editing.price_paisa || 0) / 100}
-                  />
-                </label>
-                <label>
-                  {t("বিভাগ", "Category")}
-                  <select name="category" defaultValue={editing.category}>
-                    {categories
-                      .filter((x) => x.id !== "all")
-                      .map((c) => (
-                        <option key={c.id} value={c.id}>
-                          {c[locale]}
-                        </option>
-                      ))}
-                  </select>
-                </label>
-                <label>
-                  {t("ভাষা", "Language")}
-                  <select name="language" defaultValue={editing.language}>
-                    <option value="bn">বাংলা</option>
-                    <option value="en">English</option>
-                  </select>
-                </label>
-                <label>
-                  {t("পৃষ্ঠা", "Pages")}
-                  <input
-                    name="pages"
-                    type="number"
-                    min="1"
-                    max="20000"
-                    required
-                    defaultValue={editing.pages}
-                  />
-                </label>
-                <label>
-                  {t("প্রচ্ছদের রং", "Fallback cover colour")}
-                  <select name="cover_style" defaultValue={editing.cover_style}>
-                    {[
-                      "forest",
-                      "blue",
-                      "orange",
-                      "pink",
-                      "olive",
-                      "violet",
-                      "yellow",
-                      "red",
-                    ].map((s) => (
-                      <option key={s}>{s}</option>
-                    ))}
-                  </select>
-                </label>
-              </div>
-              <label>
-                বিবরণ (বাংলা)
-                <textarea
-                  key={`${editing.id}-bn`}
-                  name="description_bn"
-                  required
-                  minLength={10}
-                  maxLength={5000}
-                  defaultValue={editing.description_bn}
-                />
-              </label>
-              <label>
-                Description (English)
-                <textarea
-                  key={`${editing.id}-en`}
-                  name="description_en"
-                  required
-                  minLength={10}
-                  maxLength={5000}
-                  defaultValue={editing.description_en}
-                />
-              </label>
-              <div className="form-grid">
-                <label className="checkbox">
-                  <input
-                    type="checkbox"
-                    name="published"
-                    defaultChecked={editing.published}
-                  />
-                  {t(
-                    "প্রকাশিত (আগে ফাইল আপলোড করুন)",
-                    "Published (upload files first)",
-                  )}
-                </label>
-                <label className="checkbox">
-                  <input
-                    type="checkbox"
-                    name="is_demo"
-                    defaultChecked={editing.is_demo}
-                  />
-                  {t("নমুনা বই", "Sample book")}
-                </label>
-                <label className="checkbox">
-                  <input
-                    type="checkbox"
-                    name="featured"
-                    defaultChecked={editing.featured}
-                  />
-                  {t("বিশেষ বাছাই", "Featured")}
-                </label>
-              </div>
-              <button className="button" disabled={busy}>
-                {busy && <LoaderCircle className="spin" size={16} />}{" "}
-                {t("সংরক্ষণ করুন", "Save book")}
-              </button>
-              {editing.id && (
-                <>
-                  <h3>{t("বইয়ের ফাইল", "Book files")}</h3>
-                  <p>
-                    {t(
-                      "প্রচ্ছদ সর্বোচ্চ ৫ MB; প্রতিটি ইবুক সর্বোচ্চ ৩০ MB।",
-                      "Cover: up to 5 MB. Each ebook: up to 30 MB.",
-                    )}
-                  </p>
-                  <div className="form-grid">
-                    {["cover", "pdf", "epub"].map((kind) => (
-                      <label key={kind}>
-                        <span>
-                          <Upload size={14} /> {kind.toUpperCase()}
-                        </span>
-                        <input
-                          type="file"
-                          disabled={busy}
-                          accept={
-                            kind === "cover"
-                              ? "image/png,image/jpeg,image/webp"
-                              : `.${kind}`
-                          }
-                          onChange={(e) => {
-                            void upload(kind, e.target.files?.[0]);
-                            e.target.value = "";
-                          }}
-                        />
-                      </label>
-                    ))}
-                  </div>
-                </>
-              )}
-            </form>
+            </div>
           )}
+          {editing && <BookEditor
+            key={editing}
+            book={editing === "new" ? undefined : books.find((book) => book.id === editing) || recentBook || undefined}
+            ownerId={ownerId}
+            restored={editing === "new" ? restoredDraft : null}
+            onClose={() => { setEditing(null); setRestoredDraft(null); }}
+            onDraftChange={setSavedDraft}
+            onSaved={(id, values) => {
+              setRecentBook({
+                id, slug: values.slug, title_bn: values.title_bn, title_en: values.title_en,
+                author_bn: values.author_bn, author_en: values.author_en,
+                description_bn: values.description_bn, description_en: values.description_en,
+                category: values.category, price_paisa: Math.round(Number(values.price) * 100),
+                pages: Number(values.pages), language: values.language,
+                cover_style: values.cover_style, cover_path: null, formats: [],
+                published: values.published, is_demo: values.is_demo, featured: values.featured,
+              });
+              setNotice(editing === "new" ? t("খসড়া সংরক্ষিত হয়েছে। নিচে ফাইল আপলোড করুন।", "Draft saved. Upload its files below.") : "");
+              setEditing(id); setRestoredDraft(null);
+            }}
+          />}
           <div className="table-wrap">
             <table>
               <thead>
@@ -425,8 +216,8 @@ export function Admin({
                         className="icon-button"
                         aria-label={`Edit ${book.title_en}`}
                         onClick={() => {
-                          setEditing(null);
-                          setTimeout(() => setEditing(book), 0);
+                          setEditing(book.id);
+                          setRestoredDraft(null);
                           window.scrollTo({ top: 0, behavior: "smooth" });
                         }}
                       >

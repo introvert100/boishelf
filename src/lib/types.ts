@@ -18,6 +18,7 @@ export type Book = {
   cover_path: string | null;
   cover_style: string;
   formats: string[];
+  format_names?: Record<string, string>;
   published: boolean;
   is_demo: boolean;
   featured: boolean;

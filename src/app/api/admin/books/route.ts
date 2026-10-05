@@ -13,14 +13,16 @@ export async function POST(request: Request) {
         throw new AppError(
           400,
           "Save a draft and upload files before publishing.",
+          { published: ["Save a draft and upload files before publishing."] },
         );
       const { data: files, error } = await db
         .from("book_formats")
         .select("id")
-        .eq("book_id", id);
+        .eq("book_id", id)
+        .in("format", ["pdf", "epub"]);
       if (error) throw error;
       if (!files.length)
-        throw new AppError(400, "Upload a PDF or EPUB before publishing.");
+        throw new AppError(400, "Upload a PDF or EPUB before publishing.", { published: ["Upload a PDF or EPUB before publishing."] });
       if (!values.is_demo) {
         const { data } = await db
           .from("books")
@@ -31,6 +33,7 @@ export async function POST(request: Request) {
           throw new AppError(
             400,
             "Upload a cover before publishing a real book.",
+            { published: ["Upload a cover before publishing a real book."] },
           );
       }
     }
@@ -40,7 +43,7 @@ export async function POST(request: Request) {
     const { data, error } = await query.select("id").single();
     if (error) {
       if (error.code === "23505")
-        throw new AppError(409, "This book URL is already in use.");
+        throw new AppError(409, "This book URL is already in use.", { slug: ["This book URL is already in use."] });
       throw error;
     }
     return Response.json(data);

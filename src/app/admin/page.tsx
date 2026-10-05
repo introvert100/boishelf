@@ -36,6 +36,7 @@ export default async function Page() {
       policies={policies!}
       gates={state.gates}
       mode={state.mode}
+      ownerId={user.id}
     />
   );
 }

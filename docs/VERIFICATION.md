@@ -20,3 +20,7 @@ Not verified or performed without account access:
 - Monitoring workflow and backups are documented/configured for future use but are not active in cloud accounts.
 
 The implementation deliberately leaves real payments disabled. Follow DEPLOYMENT.md before treating the store as commercially launched.
+
+## Admin editor update — 5 October 2026
+
+The new book form now reports field-specific errors, keeps unfinished new-book entries in owner-scoped browser storage, and shows separate cover/PDF/EPUB upload controls with progress and status. Local checks: `npm run typecheck`, `npm test` (**31 passed**, including new validation/draft/upload checks), `npm run build`, and desktop/mobile Playwright (**10 passed**). Intermittent page-load timeouts in the browser suite were addressed by waiting for the document instead of all resources; the final complete run passed. Browser tests use the unconfigured sample mode, so an authenticated owner session and live Supabase Storage are still needed to confirm save, restore, upload, replacement, and publish on the deployed site. Roll back this change by restoring the previous application commit; browser drafts are local and have no database migration.

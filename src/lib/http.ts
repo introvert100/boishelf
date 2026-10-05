@@ -8,6 +8,7 @@ export class AppError extends Error {
   constructor(
     public status: number,
     message: string,
+    public fields?: Record<string, string[]>,
   ) {
     super(message);
   }
@@ -31,18 +32,18 @@ export function apiError(error: unknown, event = "server_error") {
     if (error.status >= 500 || event === "payment_callback_failed")
       logEvent(event, { requestId: id, status: error.status });
     return NextResponse.json(
-      { error: error.message, requestId: id },
+      { error: error.message, fields: error.fields, requestId: id },
       { status: error.status },
     );
   }
-  if (error instanceof ZodError)
+  if (error instanceof ZodError) {
+    const fields = error.flatten().fieldErrors;
+    const first = Object.values(fields).flat()[0] || error.issues[0]?.message;
     return NextResponse.json(
-      {
-        error: "Please check the fields and try again.",
-        fields: error.flatten().fieldErrors,
-      },
+      { error: first || "Check the highlighted fields.", fields, requestId: id },
       { status: 400 },
     );
+  }
   logEvent(event, { requestId: id });
   return NextResponse.json(
     { error: "Something went wrong. Please try again shortly.", requestId: id },

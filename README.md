@@ -26,6 +26,14 @@ Copy `.env.example` to `.env.local` and follow [the deployment guide](docs/DEPLO
 - Separate sandbox/live entitlements; real payments gated by launch settings and real content.
 - Render Blueprint, GitHub CI, optional scheduled production health checks, and structured server error logs.
 
+## Add a book
+
+Sign in with the Gmail address configured as `ADMIN_EMAIL`, then open `/admin` and choose **Add a book**. Enter both language versions, a lowercase URL slug such as `amar-boi`, and a price in BDT. The form points to any field that needs correction. Choose **Save as draft** before uploading files.
+
+The saved book shows separate controls for a cover image (PNG/JPG/WebP, up to 5 MB), PDF (up to 30 MB), and EPUB (up to 30 MB). Upload either PDF or EPUB to make publishing possible. A non-sample book also needs a cover. Then select **Published** and save again. Uploading a new file of the same type replaces the active one; the previous private object remains available for rollback as described in [operations](docs/OPERATIONS.md).
+
+Unfinished new-book details are saved only in this browser for the signed-in owner. After a refresh, choose **Restore draft** or **Discard draft**. Saving the book clears that browser draft.
+
 ## Checks
 
 ```sh

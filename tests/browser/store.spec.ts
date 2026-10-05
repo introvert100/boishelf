@@ -1,6 +1,6 @@
 import { test, expect } from "@playwright/test";
 test("catalogue, language, filters and book details work", async ({ page }) => {
-  await page.goto("/");
+  await page.goto("/", { waitUntil: "domcontentloaded" });
   await expect(page.locator("html")).toHaveAttribute("lang", "bn");
   await expect(page.locator(".book-card")).toHaveCount(8);
   await page.getByRole("button", { name: "Switch to English" }).click();
@@ -22,7 +22,7 @@ test("catalogue, language, filters and book details work", async ({ page }) => {
   ).toBeVisible();
 });
 test("search empty state and category reset", async ({ page }) => {
-  await page.goto("/");
+  await page.goto("/", { waitUntil: "domcontentloaded" });
   await page.getByRole("button", { name: "Switch to English" }).click();
   await page.getByRole("button", { name: "Fiction", exact: true }).click();
   await expect(page.locator(".book-card")).toHaveCount(2);
@@ -39,7 +39,7 @@ test("unconfigured authentication and admin routes stay closed", async ({
   page,
   request,
 }) => {
-  await page.goto("/library");
+  await page.goto("/library", { waitUntil: "domcontentloaded" });
   await expect(page).toHaveURL(/\/signin/);
   await page.getByRole("button", { name: "Switch to English" }).click();
   await expect(
@@ -65,9 +65,9 @@ test("unconfigured authentication and admin routes stay closed", async ({
   ).toBe(401);
 });
 test("policies, 404 and mobile layout are clear", async ({ page }) => {
-  await page.goto("/policies/refund");
+  await page.goto("/policies/refund", { waitUntil: "domcontentloaded" });
   await expect(page.locator("h1")).toBeVisible();
-  await page.goto("/");
+  await page.goto("/", { waitUntil: "domcontentloaded" });
   expect(
     await page.evaluate(
       () => document.documentElement.scrollWidth <= window.innerWidth,
@@ -81,7 +81,7 @@ test("policies, 404 and mobile layout are clear", async ({ page }) => {
       () => document.documentElement.scrollWidth <= window.innerWidth + 2,
     ),
   ).toBe(true);
-  await page.goto("/books/missing-book");
+  await page.goto("/books/missing-book", { waitUntil: "domcontentloaded" });
   await expect(page.getByRole("heading", { name: "404" })).toBeVisible();
 });
 test("CSRF and readiness endpoints deny unauthorised callers", async ({

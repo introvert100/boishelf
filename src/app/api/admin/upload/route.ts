@@ -7,7 +7,7 @@ import {
   rateLimit,
   boundedBody,
 } from "@/lib/http";
-import { detectUpload } from "@/lib/admin-validation";
+import { detectUpload, uploadProblem } from "@/lib/admin-validation";
 import { z } from "zod";
 export async function POST(request: Request) {
   let uploaded: { bucket: string; path: string } | null = null;
@@ -25,22 +25,18 @@ export async function POST(request: Request) {
     const bookId = z.uuid().parse(form.get("bookId"));
     const kind = z.enum(["cover", "pdf", "epub"]).parse(form.get("kind"));
     const file = form.get("file");
-    if (
-      !(file instanceof File) ||
-      !file.size ||
-      file.size > (kind === "cover" ? 5 : 30) * 1024 * 1024
-    )
-      throw new AppError(
-        400,
-        "Choose a file under 5 MB for covers or 30 MB for ebooks.",
-      );
+    if (!(file instanceof File)) throw new AppError(400, "Choose a file to upload.");
+    const fileProblem = uploadProblem(kind, file.name, file.size);
+    if (fileProblem) throw new AppError(400, fileProblem);
     const bytes = new Uint8Array(await file.arrayBuffer());
     const mime = detectUpload(bytes, kind);
     if (!mime)
       throw new AppError(
         400,
-        "The file content does not match the selected format.",
+        `This file is not a valid ${kind === "cover" ? "PNG, JPG, or WebP image" : kind.toUpperCase()}. Check the file and try again.`,
       );
+    const formatProblem = uploadProblem(kind, file.name, file.size, mime);
+    if (formatProblem) throw new AppError(400, formatProblem);
     const db = serviceClient();
     const { data: book, error: be } = await db
       .from("books")
@@ -76,7 +72,8 @@ export async function POST(request: Request) {
               { onConflict: "book_id,format" },
             );
     if (save) throw save;
-    return Response.json({ ok: true });
+    uploaded = null;
+    return Response.json({ ok: true, name: original });
   } catch (e) {
     if (uploaded) {
       try {
