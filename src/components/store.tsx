@@ -1,6 +1,5 @@
 "use client";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import {
   createContext,
   useContext,
@@ -74,7 +73,6 @@ export function Shell({
 }) {
   const [locale, setLocale] = useState(initialLocale);
   const [menu, setMenu] = useState(false);
-  const router = useRouter();
   const t = (bn: string, en: string) => (locale === "bn" ? bn : en);
   useEffect(() => {
     document.documentElement.lang = locale;
@@ -83,7 +81,6 @@ export function Shell({
     const next = locale === "bn" ? "en" : "bn";
     setLocale(next);
     document.cookie = `locale=${next}; path=/; max-age=31536000; SameSite=Lax`;
-    router.refresh();
   }
   async function logout() {
     await fetch("/auth/signout", { method: "POST" });

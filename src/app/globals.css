@@ -1516,6 +1516,20 @@ td a {
   border-top: 1px solid var(--line);
   padding-top: 22px;
 }
+.publish-checklist {
+  padding-left: 20px;
+  color: var(--green-dark);
+  font-size: 13px;
+  line-height: 1.7;
+}
+.sample-file-help {
+  margin: 14px 0;
+  padding: 12px 15px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #f8faf7;
+}
+.sample-file-help p { margin: 0 0 10px; }
 .upload-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

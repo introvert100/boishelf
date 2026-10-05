@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { LoaderCircle, Upload, X } from "lucide-react";
 import { bookInput, uploadProblem, type UploadKind } from "@/lib/admin-validation";
@@ -53,9 +53,12 @@ const bnErrors: Record<string, string> = {
   "Upload failed. Please retry.": "আপলোড ব্যর্থ হয়েছে। আবার চেষ্টা করুন।",
   "Save the book before uploading files.": "ফাইল আপলোডের আগে বইটি সংরক্ষণ করুন।",
   "Choose a file to upload.": "আপলোডের জন্য ফাইল বেছে নিন।",
+  "Save this book as a sample before adding a test PDF.": "পরীক্ষার PDF যোগ করার আগে বইটি নমুনা হিসেবে সংরক্ষণ করুন।",
+  "A PDF is already uploaded. Use the PDF upload control to replace it.": "PDF ইতিমধ্যে আছে। বদলাতে PDF আপলোড ব্যবহার করুন।",
+  "Unpublish this book before changing its test file.": "পরীক্ষার ফাইল বদলানোর আগে বইটি অপ্রকাশিত করুন।",
 };
 
-function uploadFile(bookId: string, kind: UploadKind, file: File, onProgress: (progress: number) => void): Promise<{ name: string }> {
+function uploadFile(bookId: string, kind: UploadKind, file: File, onProgress: (progress: number) => void): Promise<{ name: string; path?: string }> {
   return new Promise((resolve, reject) => {
     const form = new FormData();
     form.set("bookId", bookId);
@@ -68,9 +71,9 @@ function uploadFile(bookId: string, kind: UploadKind, file: File, onProgress: (p
     };
     xhr.onerror = () => reject(new Error("Network error. Check your connection and try again."));
     xhr.onload = () => {
-      let result: { error?: string; requestId?: string; name?: string } = {};
+      let result: { error?: string; requestId?: string; name?: string; path?: string } = {};
       try { result = JSON.parse(xhr.responseText); } catch { /* The server may have returned an HTML error page. */ }
-      if (xhr.status >= 200 && xhr.status < 300) resolve({ name: result.name || file.name });
+      if (xhr.status >= 200 && xhr.status < 300) resolve({ name: result.name || file.name, path: result.path });
       else reject(new Error(`${result.error || "Upload failed. Please retry."}${result.requestId ? ` (request ${result.requestId})` : ""}`));
     };
     xhr.send(form);
@@ -78,12 +81,14 @@ function uploadFile(bookId: string, kind: UploadKind, file: File, onProgress: (p
 }
 
 export function BookEditor({
-  book, ownerId, restored, onSaved, onClose, onDraftChange,
+  book, ownerId, sandbox, restored, onSaved, onUploaded, onClose, onDraftChange,
 }: {
   book?: Book;
   ownerId: string;
+  sandbox: boolean;
   restored?: BookFormValues | null;
   onSaved: (id: string, values: BookFormValues) => void;
+  onUploaded: (id: string, kind: UploadKind, name: string, path?: string) => void;
   onClose: () => void;
   onDraftChange: (values: BookFormValues | null) => void;
 }) {
@@ -94,7 +99,15 @@ export function BookEditor({
   const [formError, setFormError] = useState("");
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
+  const busyRef = useRef(false);
   const [uploads, setUploads] = useState<Partial<Record<UploadKind, UploadState>>>({});
+  const hasEbook = !!book?.formats.some((format) => format === "PDF" || format === "EPUB") || uploads.pdf?.phase === "done" || uploads.epub?.phase === "done";
+  const hasCover = !!book?.cover_path || uploads.cover?.phase === "done";
+  const missingPublicationFile = !hasEbook
+    ? "Upload a PDF or EPUB before publishing."
+    : !values.is_demo && !hasCover
+      ? "Upload a cover before publishing a real book."
+      : null;
 
   function localize(message: string) { return locale === "bn" ? bnErrors[message] || message : message; }
   function change(field: keyof BookFormValues, value: string | boolean) {
@@ -114,6 +127,7 @@ export function BookEditor({
 
   async function save(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (busyRef.current) return;
     setFormError(""); setNotice(""); setErrors({});
     const body = {
       ...values, id: book?.id,
@@ -131,7 +145,13 @@ export function BookEditor({
       setFormError(t("চিহ্নিত ঘরগুলো ঠিক করুন। লেখা সংরক্ষিত আছে।", "Fix the highlighted fields. Your entries are still here."));
       return;
     }
-    setBusy(true);
+    if (values.published && missingPublicationFile) {
+      setErrors({ published: missingPublicationFile });
+      setFormError(localize(missingPublicationFile));
+      document.getElementById("published-help")?.scrollIntoView({ block: "center", behavior: "smooth" });
+      return;
+    }
+    busyRef.current = true; setBusy(true);
     try {
       const response = await fetch("/api/admin/books", {
         method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(validation.data),
@@ -143,7 +163,7 @@ export function BookEditor({
           if (Array.isArray(messages) && typeof messages[0] === "string") mapped[field === "price_paisa" ? "price" : field] = messages[0];
         }
         setErrors(mapped);
-        setFormError(Object.keys(mapped).length ? t("চিহ্নিত ঘরগুলো ঠিক করুন। লেখা সংরক্ষিত আছে।", "Fix the highlighted fields. Your entries are still here.") : `${result.error || t("সংরক্ষণ ব্যর্থ হয়েছে। আবার চেষ্টা করুন।", "Save failed. Please retry.")}${result.requestId ? ` (${t("অনুরোধ", "request")} ${result.requestId})` : ""}`);
+        setFormError(`${localize(result.error || t("সংরক্ষণ ব্যর্থ হয়েছে। আবার চেষ্টা করুন।", "Save failed. Please retry."))}${result.requestId ? ` (${t("অনুরোধ", "request")} ${result.requestId})` : ""}`);
         return;
       }
       if (!book) {
@@ -155,28 +175,49 @@ export function BookEditor({
       router.refresh();
     } catch {
       setFormError(t("সংযোগে সমস্যা হয়েছে। লেখা সংরক্ষিত আছে; আবার চেষ্টা করুন।", "Connection failed. Your entries are still here; please retry."));
-    } finally { setBusy(false); }
+    } finally { busyRef.current = false; setBusy(false); }
   }
 
   async function upload(kind: UploadKind, file?: File) {
     if (!book?.id || !file) return;
+    if (busyRef.current) return;
     const existing = kind === "cover" ? !!book.cover_path : book.formats.includes(kind.toUpperCase());
     const problem = uploadProblem(kind, file.name, file.size);
     if (problem) {
       setUploads((current) => ({ ...current, [kind]: { phase: "error", progress: 0, filename: file.name, error: problem } }));
       return;
     }
-    setBusy(true); setFormError(""); setNotice("");
+    busyRef.current = true; setBusy(true); setFormError(""); setNotice("");
     setUploads((current) => ({ ...current, [kind]: { phase: "uploading", progress: 0, filename: file.name } }));
     try {
       const result = await uploadFile(book.id, kind, file, (progress) => {
         setUploads((current) => ({ ...current, [kind]: { phase: progress === 100 ? "processing" : "uploading", progress, filename: file.name } }));
       });
       setUploads((current) => ({ ...current, [kind]: { phase: "done", progress: 100, filename: result.name, replaced: existing } }));
+      onUploaded(book.id, kind, result.name, result.path);
       router.refresh();
     } catch (error) {
       setUploads((current) => ({ ...current, [kind]: { phase: "error", progress: 0, filename: file.name, error: (error as Error).message } }));
-    } finally { setBusy(false); }
+    } finally { busyRef.current = false; setBusy(false); }
+  }
+
+  async function addSamplePdf() {
+    if (!book?.id || busyRef.current) return;
+    busyRef.current = true; setBusy(true); setFormError(""); setNotice("");
+    try {
+      const response = await fetch("/api/admin/sample-pdf", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ bookId: book.id }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(`${result.error || "Could not create test PDF."}${result.requestId ? ` (request ${result.requestId})` : ""}`);
+      setUploads((current) => ({ ...current, pdf: { phase: "done", progress: 100, filename: result.name } }));
+      onUploaded(book.id, "pdf", result.name);
+      setNotice(t("পরীক্ষার PDF তৈরি হয়েছে। এখন বইটি প্রকাশ করতে পারেন।", "Test PDF created. You can now publish the book."));
+      router.refresh();
+    } catch (error) {
+      setFormError(localize((error as Error).message));
+    } finally { busyRef.current = false; setBusy(false); }
   }
 
   function fieldError(field: string) {
@@ -207,6 +248,7 @@ export function BookEditor({
       <li className={book ? "active" : ""}>3. {t("প্রচ্ছদ ও ইবুক ফাইল আপলোড", "Upload cover and ebook files")}</li>
     </ol>
     {!book && <p className="draft-note">{restored ? t("পুনরুদ্ধার করা, এখনো সংরক্ষণ করা হয়নি এমন খসড়া।", "Restored unsaved browser draft.") : t("আপনার লেখা এই ব্রাউজারে সাময়িকভাবে সংরক্ষিত হবে।", "Your unfinished details are saved in this browser.")}</p>}
+    {book && <p className="draft-note" role="status">{t("সার্ভারে সংরক্ষিত অবস্থা:", "Saved on server:")} <strong>{book.published ? t("প্রকাশিত", "Published") : t("খসড়া", "Draft")}</strong>{values.published !== book.published && ` · ${t("নতুন অবস্থা সংরক্ষণ করা হয়নি", "status change not saved yet")}`}</p>}
     {formError && <p className="notice error" role="alert">{formError}</p>}
     {notice && <p className="notice" role="status">{notice}</p>}
     <form onSubmit={save} noValidate>
@@ -233,12 +275,21 @@ export function BookEditor({
         <label className="checkbox"><input type="checkbox" name="featured" checked={values.featured} onChange={(e) => change("featured", e.target.checked)} />{t("বিশেষ বাছাই", "Featured")}</label>
       </div>
       <p id="published-help" className="field-help">{book ? t("প্রকাশ করতে PDF অথবা EPUB লাগবে। নমুনা নয় এমন বইয়ে প্রচ্ছদও লাগবে।", "Publishing needs a PDF or EPUB. Non-sample books also need a cover.") : t("প্রথমে খসড়া সংরক্ষণ করুন, তারপর ফাইল আপলোড করে প্রকাশ করুন।", "Save a draft first, then upload files and publish.")}</p>
+      {book && <ul className="publish-checklist" aria-label={t("প্রকাশের প্রস্তুতি", "Publishing requirements")}>
+        <li>{hasEbook ? "✓" : "○"} {t("PDF অথবা EPUB আপলোড", "PDF or EPUB uploaded")}</li>
+        <li>{values.is_demo || hasCover ? "✓" : "○"} {values.is_demo ? t("নমুনা বইয়ের জন্য প্রচ্ছদ ঐচ্ছিক", "Cover optional for sample book") : t("প্রচ্ছদ আপলোড", "Cover uploaded")}</li>
+      </ul>}
       {fieldError("published")}
       <button className="button" type="submit" disabled={busy}>{busy && <LoaderCircle className="spin" size={16} />} {!book ? t("খসড়া সংরক্ষণ করুন", "Save as draft") : values.published && !book.published ? t("বই প্রকাশ করুন", "Publish book") : t("পরিবর্তন সংরক্ষণ করুন", "Save changes")}</button>
     </form>
     {book ? <section className="file-step" aria-label={t("ফাইল আপলোড", "Upload files")}>
       <h3>{t("ধাপ ৩: প্রচ্ছদ ও ইবুক ফাইল", "Step 3: cover and ebook files")}</h3>
       <p>{t("একটি PDF অথবা EPUB আপলোড করলেই প্রকাশ করা যাবে। একই ধরনের নতুন ফাইল পুরোনোটি বদলে দেবে।", "Upload either a PDF or an EPUB to publish. A new file of the same type replaces the current one.")}</p>
+      {values.is_demo && <div className="sample-file-help">
+        <p>{t("নমুনা চিহ্ন দিলেই ফাইল তৈরি হয় না। নিজের PDF/EPUB আপলোড করুন, অথবা পরীক্ষার জন্য একটি এক-পৃষ্ঠার PDF তৈরি করুন।", "Marking a book as a sample does not add an ebook. Upload your own PDF/EPUB, or create a one-page test PDF.")}</p>
+        {sandbox && !book.formats.includes("PDF") && uploads.pdf?.phase !== "done" && !book.published && <button type="button" className="button secondary" disabled={busy || !book.is_demo} onClick={() => void addSamplePdf()}>{t("পরীক্ষার PDF তৈরি করুন", "Create test PDF")}</button>}
+        {!book.is_demo && <p className="field-help">{t("প্রথমে নমুনা বই হিসেবে পরিবর্তন সংরক্ষণ করুন।", "Save the book as a sample first.")}</p>}
+      </div>}
       <div className="upload-grid">{uploadKinds.map((kind) => {
         const state = uploads[kind];
         const existing = kind === "cover" ? !!book.cover_path : book.formats.includes(kind.toUpperCase());

@@ -9,7 +9,7 @@ test("catalogue, language, filters and book details work", async ({ page }) => {
   ).toBeVisible();
   await page.getByRole("textbox", { name: "Search books" }).fill("quiet focus");
   await expect(page.locator(".book-card")).toHaveCount(1);
-  await page.getByRole("heading", { name: "The Power of Quiet Focus" }).click();
+  await page.getByRole("link", { name: "The Power of Quiet Focus", exact: true }).click();
   await expect(
     page.getByRole("heading", { level: 1, name: "The Power of Quiet Focus" }),
   ).toBeVisible();
@@ -52,6 +52,14 @@ test("unconfigured authentication and admin routes stay closed", async ({
       await request.post("/api/admin/books", {
         headers: { Origin: "http://localhost:3000" },
         data: {},
+      })
+    ).status(),
+  ).toBe(401);
+  expect(
+    (
+      await request.post("/api/admin/sample-pdf", {
+        headers: { Origin: "http://localhost:3000" },
+        data: { bookId: "00000000-0000-4000-8000-000000000001" },
       })
     ).status(),
   ).toBe(401);

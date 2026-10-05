@@ -29,8 +29,8 @@ export function logEvent(
 export function apiError(error: unknown, event = "server_error") {
   const id = crypto.randomUUID();
   if (error instanceof AppError) {
-    if (error.status >= 500 || event === "payment_callback_failed")
-      logEvent(event, { requestId: id, status: error.status });
+    if (error.status >= 500 || event === "payment_callback_failed" || event === "admin_book_save_failed")
+      logEvent(event, { requestId: id, status: error.status, ...(event === "admin_book_save_failed" ? { fields: Object.keys(error.fields || {}).join(",") } : {}) });
     return NextResponse.json(
       { error: error.message, fields: error.fields, requestId: id },
       { status: error.status },
@@ -39,6 +39,8 @@ export function apiError(error: unknown, event = "server_error") {
   if (error instanceof ZodError) {
     const fields = error.flatten().fieldErrors;
     const first = Object.values(fields).flat()[0] || error.issues[0]?.message;
+    if (event === "admin_book_save_failed")
+      logEvent(event, { requestId: id, status: 400, fields: Object.keys(fields).join(",") });
     return NextResponse.json(
       { error: first || "Check the highlighted fields.", fields, requestId: id },
       { status: 400 },

@@ -38,6 +38,11 @@ export function Admin({
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
+  const displayBooks = recentBook
+    ? books.some((book) => book.id === recentBook.id)
+      ? books.map((book) => book.id === recentBook.id ? recentBook : book)
+      : [recentBook, ...books]
+    : books;
   useEffect(() => {
     try { setSavedDraft(parseBookDraft(window.localStorage.getItem(draftKey(ownerId)))); }
     catch { setSavedDraft(null); }
@@ -102,7 +107,7 @@ export function Admin({
       </div>
       <div className="admin-stats">
         <div className="panel">
-          <strong>{books.length}</strong>
+          <strong>{displayBooks.length}</strong>
           <span>{t("ক্যাটালগে বই", "Books in catalogue")}</span>
         </div>
         <div className="panel">
@@ -167,23 +172,35 @@ export function Admin({
           )}
           {editing && <BookEditor
             key={editing}
-            book={editing === "new" ? undefined : books.find((book) => book.id === editing) || recentBook || undefined}
+            book={editing === "new" ? undefined : recentBook?.id === editing ? recentBook : books.find((book) => book.id === editing)}
             ownerId={ownerId}
+            sandbox={mode === "sandbox"}
             restored={editing === "new" ? restoredDraft : null}
             onClose={() => { setEditing(null); setRestoredDraft(null); }}
             onDraftChange={setSavedDraft}
             onSaved={(id, values) => {
+              const existing = recentBook?.id === id ? recentBook : books.find((book) => book.id === id);
               setRecentBook({
                 id, slug: values.slug, title_bn: values.title_bn, title_en: values.title_en,
                 author_bn: values.author_bn, author_en: values.author_en,
                 description_bn: values.description_bn, description_en: values.description_en,
                 category: values.category, price_paisa: Math.round(Number(values.price) * 100),
                 pages: Number(values.pages), language: values.language,
-                cover_style: values.cover_style, cover_path: null, formats: [],
+                cover_style: values.cover_style, cover_path: existing?.cover_path || null,
+                formats: existing?.formats || [], format_names: existing?.format_names,
                 published: values.published, is_demo: values.is_demo, featured: values.featured,
               });
               setNotice(editing === "new" ? t("খসড়া সংরক্ষিত হয়েছে। নিচে ফাইল আপলোড করুন।", "Draft saved. Upload its files below.") : "");
               setEditing(id); setRestoredDraft(null);
+            }}
+            onUploaded={(id, kind, name, path) => {
+              setRecentBook((current) => {
+                const existing = current?.id === id ? current : books.find((book) => book.id === id);
+                if (!existing) return current;
+                return kind === "cover"
+                  ? { ...existing, cover_path: path || existing.cover_path }
+                  : { ...existing, formats: [...new Set([...existing.formats, kind.toUpperCase()])], format_names: { ...existing.format_names, [kind]: name } };
+              });
             }}
           />}
           <div className="table-wrap">
@@ -198,7 +215,7 @@ export function Admin({
                 </tr>
               </thead>
               <tbody>
-                {books.map((book) => (
+                {displayBooks.map((book) => (
                   <tr key={book.id}>
                     <td>
                       {locale === "bn" ? book.title_bn : book.title_en}

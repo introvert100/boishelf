@@ -73,7 +73,7 @@ export async function POST(request: Request) {
             );
     if (save) throw save;
     uploaded = null;
-    return Response.json({ ok: true, name: original });
+    return Response.json({ ok: true, name: original, path });
   } catch (e) {
     if (uploaded) {
       try {
