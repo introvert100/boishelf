@@ -1,42 +1,44 @@
 # Repository Guidelines
 
-## Project Structure
+## Project Layout
 
-This is a Next.js 16 application using TypeScript, Supabase, and SSLCOMMERZ sandbox checkout.
+BoiShelf is a Next.js 16/TypeScript ebook store.
 
-- `src/app/` contains routes, pages, API handlers, and the health endpoints.
-- `src/components/` contains client-facing catalogue, checkout, library, and admin UI.
-- `src/lib/` contains server-only authentication, database, payment, validation, and configuration logic.
-- `supabase/migrations/` contains append-only database schema and RLS migrations.
-- `tests/` contains Node security/database tests and Playwright browser tests.
-- `public/` contains static assets; `scripts/` contains local startup, seeding, validation, and inspection utilities.
-- `docs/` documents deployment and operations; `.github/workflows/` defines CI and optional monitoring.
+- `src/app/`: pages, API routes, and health checks.
+- `src/components/`: catalogue, auth, checkout, library, and admin UI.
+- `src/lib/`: server-only auth, database, storage, payments, and validation.
+- `supabase/migrations/`: append-only schema and RLS migrations.
+- `tests/`: unit, security, database, and Playwright browser tests.
+- `public/`, `scripts/`, `docs/`: assets, utilities, and deployment documentation.
 
-## Build, Test, and Development Commands
+## Development Commands
 
-Use Node 24 (the required engine) and install with `npm ci`.
+Use Node 24 and `npm ci`.
 
-- `npm run dev` starts the local development server.
-- `npm run typecheck` runs the TypeScript compiler without emitting files.
-- `npm test` runs unit, security, and database tests.
-- `npm run db:test` runs the database/RLS test suite alone.
-- `npm run test:e2e` runs the Playwright desktop and mobile flows.
-- `npm run build` creates the production build; `npm start` serves it.
-- `npm run check` runs type checking, tests, and the production build.
-- `npm run validate:render` validates `render.yaml` against Render’s schema.
+- `npm run dev`: start development.
+- `npm run typecheck`: run strict TypeScript checks.
+- `npm test`: run unit, security, and database tests.
+- `npm run db:test`: run database/RLS tests.
+- `npm run test:e2e`: run Playwright desktop/mobile flows.
+- `npm run build` / `npm start`: build and serve production output.
+- `npm run check`: typecheck, test, and build.
+- `npm run validate:render`: validate `render.yaml`.
 
-## Coding Style and Naming
+## Coding, Testing, and Security
 
-Use two-space indentation, strict TypeScript, and clear small functions. Keep server-only code in `src/lib/` and do not expose service-role keys or private storage paths to the browser. Use PascalCase for React components, camelCase for functions and variables, and kebab-case for route segments. Preserve the bilingual Bangla-first UI and use the existing formatting/style conventions when editing CSS.
+Use two-space indentation, strict TypeScript, small functions, PascalCase React components, camelCase variables/functions, and kebab-case routes. Preserve the accessible Bangla-first bilingual UI. Keep server-only code and secrets in `src/lib/`; never expose service-role keys or private storage paths.
 
-## Testing Guidelines
+Put security tests in `tests/security.test.ts`, RLS tests in `tests/database.test.ts`, and journeys in `tests/browser/store.spec.ts`. Keep ebook/cover buckets private, Gmail-only OTP enabled, and live payments disabled until launch gates pass. Copy `.env.example` to `.env.local`; never commit secrets. Apply database changes through new migrations and review RLS policies.
 
-Add security-sensitive behavior to `tests/security.test.ts` and database/RLS behavior to `tests/database.test.ts`. Add user journeys to `tests/browser/store.spec.ts`. Test both authenticated and unauthorized paths, and run `npm run check` plus `npm run test:e2e` before a pull request.
+## Strict Debug Protocol
 
-## Security and Configuration
-
-Copy `.env.example` to `.env.local`; never commit secrets. Keep ebook and cover buckets private, require Gmail-only authentication, and leave live payments disabled until all documented launch gates pass. Apply schema changes through new Supabase migrations and review RLS policies with every data-model change.
+1. **Describe the failure.** Record route/action, exact message, timestamp, environment, account role, and reproduction steps. Separate symptoms from hypotheses.
+2. **Reproduce first.** Capture browser console output, network status/response, Render logs, Supabase logs, and request IDs. Redact passwords, OTPs, API keys, private paths, payment details, and signed URLs.
+3. **Trace the boundary.** Check, in order: UI state/validation; API request/response; auth/session; Supabase database/RLS; Storage; Brevo; SSLCOMMERZ; Render configuration/deployment.
+4. **Make the smallest safe fix.** Never bypass auth, RLS, private buckets, origin checks, rate limits, or payment verification. Keep server-side validation and field-level errors. Use a new migration for schema changes.
+5. **Verify and document.** Test the failure, success, unauthorized, refresh/retry, and relevant mobile paths. Run `npm run typecheck`, `npm test`, `npm run build`, and targeted E2E tests. Record root cause, files changed, evidence, remaining risk, and rollback steps.
+6. **Escalate safely.** After repeated failed fixes, report the evidence and exact next diagnostic needed. Request screenshots only with secrets hidden and share public error/request IDs only.
 
 ## Commits and Pull Requests
 
-Use short imperative commit subjects (for example, `Add order reconciliation guard`). Pull requests should explain the user-visible change, list validation commands, link related issues, and include screenshots for UI changes. Call out migration, environment-variable, payment, or security impacts explicitly.
+Use short imperative subjects, such as `Add order reconciliation guard`. Pull requests should describe user-visible behavior, list validation commands, link issues, include UI screenshots when relevant, and call out migration, environment, payment, or security impact.
