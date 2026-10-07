@@ -4,10 +4,11 @@ import { issueUploadTicket, uploadFailure } from "@/lib/admin-upload";
 import { uploadProblem } from "@/lib/admin-validation";
 import { AppError, checkOrigin, jsonBody, rateLimit } from "@/lib/http";
 import { serviceClient } from "@/lib/supabase";
+import { ebookLimitBytes, bytesPerMb } from "@/lib/upload-limits";
 
 const input = z.object({
   bookId: z.uuid(), kind: z.enum(["pdf", "epub"]), name: z.string().min(1).max(255),
-  size: z.number().int().min(1).max(30 * 1024 * 1024),
+  size: z.number().int().min(1).max(ebookLimitBytes),
 });
 
 export async function POST(request: Request) {
@@ -27,6 +28,11 @@ export async function POST(request: Request) {
     if (bookError) throw bookError;
     if (!book) throw new AppError(404, "Save the book before uploading files.");
     if (book.archived_at) throw new AppError(409, "Restore this archived book before changing its files.");
+    const { data: bucket, error: bucketError } = await db.storage.getBucket("ebooks");
+    if (bucketError) throw bucketError;
+    if (!bucket) throw new AppError(503, "The private ebooks bucket is missing in Supabase Storage.");
+    if (bucket.file_size_limit && data.size > bucket.file_size_limit)
+      throw new AppError(413, `The ebooks bucket currently allows only ${Math.floor(bucket.file_size_limit / bytesPerMb)} MB. Apply the new BoiShelf migration in Supabase before retrying.`);
     const path = `${data.bookId}/${crypto.randomUUID()}.${data.kind}`;
     const name = data.name.replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 120) || `ebook.${data.kind}`;
     stage = "storage_upload";

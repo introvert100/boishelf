@@ -3,6 +3,7 @@ import { requireOwner } from "@/lib/auth";
 import { apiError, AppError } from "@/lib/http";
 import { inspectPdf, PreviewPdfError } from "@/lib/preview-pdf";
 import { serviceClient } from "@/lib/supabase";
+import { ebookLimitBytes } from "@/lib/upload-limits";
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -30,7 +31,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     const { data: file, error: downloadError } = await db.storage.from("ebooks").download(path);
     if (downloadError || !file) throw downloadError || new AppError(503, "Could not open the source file.");
     if (kind === "epub") {
-      if (file.size > 30 * 1024 * 1024) throw new AppError(413, "The EPUB is too large to inspect in the browser.");
+      if (file.size > ebookLimitBytes) throw new AppError(413, "The EPUB is too large to inspect in the browser.");
       return new Response(file, { headers: {
         "Content-Type": "application/epub+zip",
         "Cache-Control": "private, no-store",

@@ -62,6 +62,17 @@ test("PostgreSQL migration, access policies and atomic payment transitions", asy
     assert.equal(rows.length, 10);
     assert.ok(rows.every((r) => r.relrowsecurity));
   });
+  await t.test("free-tier ebook bucket accepts 50 MB files and remains private", async () => {
+    const { rows } = await db.query<{ file_size_limit: number; public: boolean }>(
+      "select file_size_limit,public from storage.buckets where id='ebooks'",
+    );
+    assert.equal(Number(rows[0].file_size_limit), 50 * 1024 * 1024);
+    assert.equal(rows[0].public, false);
+    const { rows: constraints } = await db.query<{ definition: string }>(
+      "select pg_get_constraintdef(oid) as definition from pg_constraint where conrelid='public.book_formats'::regclass and conname='book_formats_size_bytes_check'",
+    );
+    assert.match(constraints[0].definition, /52428800/);
+  });
   await t.test(
     "anonymous readers see published books but cannot write or read file paths",
     async () => {

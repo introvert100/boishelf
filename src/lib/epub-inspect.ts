@@ -1,4 +1,5 @@
 import { unzipSync } from "fflate";
+import { ebookLimitBytes, ebookLimitMb } from "./upload-limits";
 
 export type EpubChapter = { title: string; text: string };
 
@@ -21,7 +22,7 @@ function xml(bytes: Uint8Array) {
 }
 
 export function inspectEpub(bytes: Uint8Array): EpubChapter[] {
-  if (!bytes.length || bytes.length > 30 * 1024 * 1024) throw new Error("Choose an EPUB up to 30 MB.");
+  if (!bytes.length || bytes.length > ebookLimitBytes) throw new Error(`Choose an EPUB up to ${ebookLimitMb} MB.`);
   let total = 0;
   let files: Record<string, Uint8Array>;
   try {

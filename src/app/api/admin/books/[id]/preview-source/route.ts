@@ -5,6 +5,7 @@ import { apiError, AppError, boundedBody, checkOrigin, rateLimit } from "@/lib/h
 import { inspectPdf, makePreviewPdf, PreviewPdfError } from "@/lib/preview-pdf";
 import { queueStorageCleanup } from "@/lib/storage-cleanup";
 import { serviceClient } from "@/lib/supabase";
+import { samplePdfLimitMb } from "@/lib/upload-limits";
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const uploaded: string[] = [];
@@ -20,7 +21,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const file = form.get("file");
     const pages = z.coerce.number().int().min(0).max(20000).parse(form.get("pages"));
     if (!(file instanceof File)) throw new AppError(400, "Choose a sample PDF.");
-    const problem = uploadProblem("pdf", file.name, file.size);
+    const problem = uploadProblem("pdf", file.name, file.size, undefined, samplePdfLimitMb);
     if (problem) throw new AppError(400, problem);
     const bytes = new Uint8Array(await file.arrayBuffer());
     if (detectUpload(bytes, "pdf") !== "application/pdf") throw new AppError(400, "This file is not a valid PDF.");

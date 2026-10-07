@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { bytesPerMb, coverLimitMb, ebookLimitMb } from "./upload-limits";
 export const bookInput = z.object({
   id: z.uuid().optional(),
   slug: z
@@ -44,10 +45,11 @@ export const policyInput = z
     "Provide both language versions before publishing.",
   );
 export type UploadKind = "cover" | "pdf" | "epub";
-export function uploadProblem(kind: UploadKind, name: string, size: number, mime?: string): string | null {
-  const limit = (kind === "cover" ? 5 : 30) * 1024 * 1024;
+export function uploadProblem(kind: UploadKind, name: string, size: number, mime?: string, overrideLimitMb?: number): string | null {
+  const limitMb = overrideLimitMb ?? (kind === "cover" ? coverLimitMb : ebookLimitMb);
+  const limit = limitMb * bytesPerMb;
   if (!size || size > limit)
-    return kind === "cover" ? "Choose a cover between 1 byte and 5 MB." : `Choose ${kind === "epub" ? "an EPUB" : "a PDF"} between 1 byte and 30 MB.`;
+    return kind === "cover" ? "Choose a cover between 1 byte and 5 MB." : `Choose ${kind === "epub" ? "an EPUB" : "a PDF"} between 1 byte and ${limitMb} MB.`;
   if (!(kind === "cover" ? /\.(png|jpe?g|webp)$/i : new RegExp(`\\.${kind}$`, "i")).test(name))
     return kind === "cover" ? "Choose a PNG, JPG, or WebP cover." : `Choose a .${kind} file.`;
   if (mime && kind === "cover" && !(

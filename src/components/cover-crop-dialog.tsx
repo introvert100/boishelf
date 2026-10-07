@@ -19,22 +19,36 @@ export function CoverCropDialog({ file, onClose, onUpload }: {
   const [image, setImage] = useState<HTMLImageElement | null>(null);
   const [position, setPosition] = useState(initialPosition);
   const [error, setError] = useState("");
+  const [imageError, setImageError] = useState<"decode" | "dimensions" | null>(null);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     const element = dialog.current;
     element?.showModal();
-    const url = URL.createObjectURL(file);
+    return () => { if (element?.open) element.close(); };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    setImage(null);
+    setImageError(null);
+    const reader = new FileReader();
     const source = new Image();
     source.onload = () => {
+      if (!active) return;
       if (!source.naturalWidth || !source.naturalHeight || source.naturalWidth * source.naturalHeight > 40_000_000)
-        setError(t("ছবির মাপ খুব বড় বা ভুল। ৪ কোটি পিক্সেলের কম ছবি বেছে নিন।", "Image dimensions are invalid or too large. Choose an image under 40 megapixels."));
+        setImageError("dimensions");
       else setImage(source);
     };
-    source.onerror = () => setError(t("ছবিটি খোলা যায়নি। অন্য PNG, JPG বা WebP বেছে নিন।", "This image could not be opened. Choose another PNG, JPG, or WebP."));
-    source.src = url;
-    return () => { source.onload = null; source.onerror = null; URL.revokeObjectURL(url); if (element?.open) element.close(); };
-  }, [file, t]);
+    source.onerror = () => { if (active) setImageError("decode"); };
+    reader.onload = () => {
+      if (active && typeof reader.result === "string") source.src = reader.result;
+      else if (active) setImageError("decode");
+    };
+    reader.onerror = () => { if (active) setImageError("decode"); };
+    reader.readAsDataURL(file);
+    return () => { active = false; source.onload = null; source.onerror = null; reader.abort(); };
+  }, [file]);
 
   useEffect(() => {
     if (!image) return;
@@ -109,7 +123,10 @@ export function CoverCropDialog({ file, onClose, onUpload }: {
         <button type="button" className="button secondary" disabled={saving} onClick={() => setPosition(initialPosition)}>{t("মাঝখানে ফিরুন", "Reset to centre")}</button>
       </div>
     </div>
-    {!image && !error && <p role="status">{t("ছবি খোলা হচ্ছে…", "Opening image…")}</p>}
+    {!image && !imageError && <p role="status">{t("ছবি খোলা হচ্ছে…", "Opening image…")}</p>}
+    {imageError && <p className="notice error" role="alert">{imageError === "dimensions"
+      ? t("ছবির মাপ খুব বড় বা ভুল। ৪ কোটি পিক্সেলের কম ছবি বেছে নিন।", "Image dimensions are invalid or too large. Choose an image under 40 megapixels.")
+      : t("ব্রাউজার এই ছবিটি পড়তে পারেনি। ছবিটি খুলে দেখুন, তারপর JPG বা PNG হিসেবে আবার সংরক্ষণ করে চেষ্টা করুন।", "The browser could not decode this image. Check that it opens, then re-save it as JPG or PNG and try again.")}</p>}
     {error && <p className="notice error" role="alert">{error}</p>}
     <div className="form-actions"><button type="button" className="button" disabled={!image || saving} onClick={() => void save()}>
       {saving ? t("প্রচ্ছদ আপলোড হচ্ছে…", "Uploading cover…") : t("এই অংশটি প্রচ্ছদ হিসেবে সংরক্ষণ করুন", "Save this crop as the cover")}

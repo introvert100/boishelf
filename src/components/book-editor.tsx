@@ -3,7 +3,7 @@
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { LoaderCircle, Upload, X } from "lucide-react";
-import { bookInput, uploadProblem, type UploadKind } from "@/lib/admin-validation";
+import { bookInput, detectUpload, uploadProblem, type UploadKind } from "@/lib/admin-validation";
 import { categories } from "@/lib/demo";
 import { blankBook, bookValues, draftKey, type BookFormValues } from "@/lib/book-draft";
 import type { Book } from "@/lib/types";
@@ -43,9 +43,13 @@ const bnErrors: Record<string, string> = {
   "Choose a PNG, JPG, or WebP image.": "PNG, JPG বা WebP ছবি বেছে নিন।",
   "Choose a PNG, JPG, or WebP cover.": "PNG, JPG বা WebP প্রচ্ছদ বেছে নিন।",
   "The cover filename does not match its image format. Rename or convert the file and try again.": "প্রচ্ছদের নাম ও ছবির ধরন মিলছে না। নাম ঠিক করুন বা ছবি রূপান্তর করুন।",
+  "This file is not a PNG, JPG, or WebP image. Open it and export it as JPG or PNG before retrying.": "ফাইলটি PNG, JPG বা WebP ছবি নয়। ছবিটি খুলে JPG বা PNG হিসেবে সংরক্ষণ করে আবার চেষ্টা করুন।",
+  "This image could not be read. Choose it again or try another JPG or PNG.": "ছবিটি পড়া যায়নি। আবার বেছে নিন অথবা অন্য JPG/PNG ছবি চেষ্টা করুন।",
   "Choose a cover between 1 byte and 5 MB.": "১ বাইট থেকে ৫ MB-এর মধ্যে প্রচ্ছদ বেছে নিন।",
   "Choose a PDF between 1 byte and 30 MB.": "১ বাইট থেকে ৩০ MB-এর মধ্যে PDF বেছে নিন।",
   "Choose an EPUB between 1 byte and 30 MB.": "১ বাইট থেকে ৩০ MB-এর মধ্যে EPUB বেছে নিন।",
+  "Choose a PDF between 1 byte and 50 MB.": "১ বাইট থেকে ৫০ MB-এর মধ্যে PDF বেছে নিন।",
+  "Choose an EPUB between 1 byte and 50 MB.": "১ বাইট থেকে ৫০ MB-এর মধ্যে EPUB বেছে নিন।",
   "Choose a .pdf file.": ".pdf ফাইল বেছে নিন।",
   "Choose a .epub file.": ".epub ফাইল বেছে নিন।",
   "Choose a file between 1 byte and 5 MB.": "১ বাইট থেকে ৫ MB-এর মধ্যে ফাইল বেছে নিন।",
@@ -69,16 +73,21 @@ const bnErrors: Record<string, string> = {
   "Could not read the preview source PDF.": "প্রিভিউর উৎস PDF পড়া যায়নি। আবার চেষ্টা করুন।",
   "This book already has a PDF ebook. Set its preview page count instead.": "এই বইয়ে PDF আছে। আলাদা নমুনা আপলোড না করে প্রিভিউ পৃষ্ঠা সংখ্যা ঠিক করুন।",
   "Upload the EPUB ebook before adding a sample PDF.": "নমুনা PDF যোগ করার আগে EPUB আপলোড করুন।",
-  "The file exceeds the Supabase Storage limit. In Supabase Storage settings, allow ebooks up to 30 MB.": "ফাইলটি Supabase Storage-এর সীমা ছাড়িয়েছে। Storage settings-এ ebooks-এর সীমা ৩০ MB করুন।",
+  "The file exceeds the Supabase Storage limit. Set the ebooks bucket limit to 50 MB in Supabase Storage settings.": "ফাইলটি Supabase Storage-এর সীমা ছাড়িয়েছে। Storage settings-এ ebooks bucket-এর সীমা ৫০ MB করুন।",
   "Supabase rejected this file type. Check that the private ebook bucket accepts PDF and EPUB.": "Supabase ফাইলের ধরন গ্রহণ করেনি। ব্যক্তিগত ebooks bucket-এ PDF ও EPUB অনুমোদিত আছে কি না দেখুন।",
   "The book upload database function is missing. Apply the latest BoiShelf migration in Supabase, then retry.": "বই আপলোডের ডেটাবেস ফাংশন নেই। Supabase-এ সর্বশেষ BoiShelf migration প্রয়োগ করে আবার চেষ্টা করুন।",
+  "The database still has the 30 MB ebook limit. Apply the new BoiShelf migration in Supabase, then retry.": "ডেটাবেসে এখনও ৩০ MB সীমা আছে। Supabase-এ নতুন BoiShelf migration চালিয়ে আবার চেষ্টা করুন।",
+  "Check the upload details. PDF and EPUB files must be between 1 byte and 50 MB.": "আপলোডের তথ্য পরীক্ষা করুন। PDF ও EPUB ফাইল ১ বাইট থেকে ৫০ MB-এর মধ্যে হতে হবে।",
   "Supabase Storage could not save or read this file. Check the private bucket, its size limit, and Storage logs.": "Supabase Storage ফাইল সংরক্ষণ বা পড়তে পারেনি। ব্যক্তিগত bucket, ফাইলের সীমা ও Storage logs দেখুন।",
   "The file reached Storage, but the book record could not be updated. Check Supabase database logs.": "ফাইল Storage-এ পৌঁছেছে, কিন্তু বইয়ের তথ্য সংরক্ষণ হয়নি। Supabase database logs দেখুন।",
   "Upload session is invalid. Choose the file again.": "আপলোড সেশনটি বৈধ নয়। ফাইলটি আবার বেছে নিন।",
   "Upload session expired or invalid. Choose the file again.": "আপলোড সেশনের মেয়াদ শেষ বা এটি ভুল। ফাইলটি আবার বেছে নিন।",
-  "Supabase Storage rejected the file size. Check that the ebook bucket allows up to 30 MB.": "Supabase Storage ফাইলের আকার গ্রহণ করেনি। ebooks bucket-এ ৩০ MB পর্যন্ত অনুমতি দিন।",
+  "Supabase Storage rejected the file size. Check that the ebook bucket allows up to 50 MB.": "Supabase Storage ফাইলের আকার গ্রহণ করেনি। ebooks bucket-এ ৫০ MB পর্যন্ত অনুমতি দিন।",
   "Supabase Storage rejected this upload. Check the private ebook bucket's size and PDF/EPUB type settings.": "Supabase Storage আপলোড গ্রহণ করেনি। ব্যক্তিগত ebooks bucket-এর ফাইলের সীমা ও PDF/EPUB অনুমতি দেখুন।",
   "Supabase Storage refused this upload. Reload and retry; if it persists, check the Storage configuration.": "Supabase Storage আপলোডের অনুমতি দেয়নি। পাতা রিফ্রেশ করে চেষ্টা করুন; না হলে Storage settings দেখুন।",
+  "Supabase Storage rejected the file size. Check the global Storage limit and set the ebooks bucket limit to 50 MB.": "Supabase-এর global Storage সীমা দেখুন এবং ebooks bucket-এর সীমা ৫০ MB করুন।",
+  "Supabase Storage rejected the file type. Allow application/pdf and application/epub+zip in the private ebooks bucket.": "ব্যক্তিগত ebooks bucket-এ application/pdf ও application/epub+zip ফাইলের অনুমতি দিন।",
+  "Supabase Storage rejected this upload. Check the Storage error code, global limit, and ebooks bucket settings.": "Supabase আপলোড গ্রহণ করেনি। Storage error code, global limit ও ebooks bucket settings দেখুন।",
   "Upload setup is incomplete. Reload the page and retry.": "আপলোড শুরু করা যায়নি। পাতা রিফ্রেশ করে আবার চেষ্টা করুন।",
   "The server returned an unreadable response.": "সার্ভার থেকে বোঝার মতো উত্তর পাওয়া যায়নি। আবার চেষ্টা করুন।",
   "The file arrived, but the book could not be saved.": "ফাইল পৌঁছেছে, কিন্তু বইয়ের সঙ্গে সংরক্ষণ করা যায়নি। আবার চেষ্টা করুন।",
@@ -156,14 +165,18 @@ export function BookEditor({
   function localize(message: string) {
     if (locale !== "bn") return message;
     const suffix = / \(request [a-f0-9-]{36}\)$/.exec(message)?.[0] || "";
-    const base = suffix ? message.slice(0, -suffix.length) : message;
+    const withoutRequest = suffix ? message.slice(0, -suffix.length) : message;
+    const storageCode = / \(Storage code: [A-Za-z0-9_]{1,48}\)$/.exec(withoutRequest)?.[0] || "";
+    const base = storageCode ? withoutRequest.slice(0, -storageCode.length) : withoutRequest;
     const maximum = /^Choose at most (\d+) preview pages so at least one page stays private\.$/.exec(base);
     if (maximum) return `শেষ পৃষ্ঠাটি ক্রেতাদের জন্য রাখতে সর্বোচ্চ ${maximum[1]} পৃষ্ঠা প্রিভিউ দিন।${suffix}`;
     const sample = /^This sample PDF has only (\d+) pages\.$/.exec(base);
     if (sample) return `নমুনা PDF-এ মাত্র ${sample[1]} পৃষ্ঠা আছে।${suffix}`;
+    const bucketLimit = /^The ebooks bucket currently allows only (\d+) MB\. Apply the new BoiShelf migration in Supabase before retrying\.$/.exec(base);
+    if (bucketLimit) return `ebooks bucket-এ এখন সর্বোচ্চ ${bucketLimit[1]} MB ফাইল নেওয়া যায়। Supabase-এ নতুন BoiShelf migration চালিয়ে আবার চেষ্টা করুন।${suffix}`;
     const interrupted = /^Direct upload was interrupted(?: \(HTTP (\d+)\))?\. Check your connection and retry\.$/.exec(base);
-    if (interrupted) return `সরাসরি আপলোডে বাধা এসেছে${interrupted[1] ? ` (HTTP ${interrupted[1]})` : ""}। সংযোগ পরীক্ষা করে আবার চেষ্টা করুন।${suffix}`;
-    return `${bnErrors[base] || base}${suffix}`;
+    if (interrupted) return `সরাসরি আপলোডে বাধা এসেছে${interrupted[1] ? ` (HTTP ${interrupted[1]})` : ""}। সংযোগ পরীক্ষা করে আবার চেষ্টা করুন।${storageCode}${suffix}`;
+    return `${bnErrors[base] || base}${storageCode}${suffix}`;
   }
   function change(field: keyof BookFormValues, value: string | boolean) {
     const next = { ...values, [field]: value } as BookFormValues;
@@ -272,9 +285,17 @@ export function BookEditor({
     } finally { busyRef.current = false; setBusy(false); }
   }
 
-  function chooseCover(file?: File) {
+  async function chooseCover(file?: File) {
     if (!file) return;
-    const problem = uploadProblem("cover", file.name, file.size);
+    let problem = uploadProblem("cover", file.name, file.size);
+    if (!problem) {
+      try {
+        const header = new Uint8Array(await file.slice(0, 12).arrayBuffer());
+        const mime = detectUpload(header, "cover");
+        problem = mime ? uploadProblem("cover", file.name, file.size, mime)
+          : "This file is not a PNG, JPG, or WebP image. Open it and export it as JPG or PNG before retrying.";
+      } catch { problem = "This image could not be read. Choose it again or try another JPG or PNG."; }
+    }
     if (problem) {
       setUploads((current) => ({ ...current, cover: { phase: "error", progress: 0, filename: file.name, error: problem } }));
       return;
@@ -336,7 +357,7 @@ export function BookEditor({
 
   async function uploadPreviewSource(file?: File) {
     if (!book?.id || !file || busyRef.current) return;
-    const problem = uploadProblem("pdf", file.name, file.size);
+    const problem = uploadProblem("pdf", file.name, file.size, undefined, 30);
     if (problem) { setPreviewError(localize(problem)); return; }
     if (!/^\d+$/.test(previewCount.trim()) || Number(previewCount) > 20000) { setPreviewError(t("০ থেকে ২০,০০০-এর মধ্যে পূর্ণসংখ্যা লিখুন।", "Enter a whole number from 0 to 20,000.")); return; }
     busyRef.current = true; setBusy(true); setPreviewError("");
@@ -429,11 +450,11 @@ export function BookEditor({
         const state = uploads[kind];
         const existing = kind === "cover" ? !!book.cover_path : book.formats.includes(kind.toUpperCase());
         const existingName = kind !== "cover" ? book.format_names?.[kind] : undefined;
-        const label = kind === "cover" ? t("প্রচ্ছদের ছবি · PNG/JPG/WebP · সর্বোচ্চ ৫ MB", "Cover image · PNG/JPG/WebP · up to 5 MB") : kind === "pdf" ? t("PDF ইবুক · সর্বোচ্চ ৩০ MB", "PDF ebook · up to 30 MB") : t("EPUB ইবুক · সর্বোচ্চ ৩০ MB", "EPUB ebook · up to 30 MB");
+        const label = kind === "cover" ? t("প্রচ্ছদের ছবি · PNG/JPG/WebP · সর্বোচ্চ ৫ MB", "Cover image · PNG/JPG/WebP · up to 5 MB") : kind === "pdf" ? t("PDF ইবুক · সর্বোচ্চ ৫০ MB", "PDF ebook · up to 50 MB") : t("EPUB ইবুক · সর্বোচ্চ ৫০ MB", "EPUB ebook · up to 50 MB");
         return <div className="upload-card" key={kind}>
           <label htmlFor={`upload-${kind}`}><span><Upload size={16} /> {label}</span>
             <input id={`upload-${kind}`} type="file" disabled={busy} accept={kind === "cover" ? ".png,.jpg,.jpeg,.webp,image/png,image/jpeg,image/webp" : `.${kind}`} onChange={(e) => {
-              if (kind === "cover") chooseCover(e.target.files?.[0]);
+              if (kind === "cover") void chooseCover(e.target.files?.[0]);
               else void upload(kind, e.target.files?.[0]);
               e.target.value = "";
             }} aria-describedby={`${kind}-status`} />

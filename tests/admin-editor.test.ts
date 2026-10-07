@@ -61,16 +61,19 @@ test("editing an existing book starts with its saved values", () => {
 
 test("cover, PDF, and EPUB uploads explain size, filename, and content problems", () => {
   const mb = 1024 * 1024;
-  for (const [kind, name, limit] of [["cover", "cover.png", 5], ["pdf", "book.pdf", 30], ["epub", "book.epub", 30]] as const) {
+  for (const [kind, name, limit] of [["cover", "cover.png", 5], ["pdf", "book.pdf", 50], ["epub", "book.epub", 50]] as const) {
     assert.equal(uploadProblem(kind, name, 1), null);
     assert.equal(uploadProblem(kind, name, limit * mb), null);
     assert.match(uploadProblem(kind, name, limit * mb + 1)!, /MB/);
     assert.match(uploadProblem(kind, name, 0)!, /byte/);
     assert.notEqual(uploadProblem(kind, "wrong.txt", 1), null);
   }
+  assert.equal(uploadProblem("pdf", "sample.pdf", 30 * mb, undefined, 30), null);
+  assert.match(uploadProblem("pdf", "sample.pdf", 30 * mb + 1, undefined, 30)!, /30 MB/);
   assert.equal(uploadProblem("cover", "cover.jpg", 5, "image/jpeg"), null);
   assert.match(uploadProblem("cover", "cover.jpg", 5, "image/png")!, /does not match/);
   assert.equal(detectUpload(new Uint8Array([0x89, 0x50, 0x4e, 0x47]), "cover"), "image/png");
+  assert.equal(detectUpload(new Uint8Array([0xff, 0xd8, 0xff, 0xe0]), "cover"), "image/jpeg");
   assert.equal(detectUpload(new TextEncoder().encode("%PDF-1.7\n"), "pdf"), "application/pdf");
   assert.equal(detectUpload(new TextEncoder().encode("PK\u0003\u0004mimetypeapplication/epub+zip"), "epub"), "application/epub+zip");
   assert.equal(detectUpload(new TextEncoder().encode("<html>not a book</html>"), "pdf"), null);

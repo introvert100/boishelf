@@ -1,10 +1,11 @@
 import { PDFDocument, PDFName } from "pdf-lib";
+import { ebookLimitBytes, ebookLimitMb } from "./upload-limits";
 
 export class PreviewPdfError extends Error {}
 
 export async function inspectPdf(bytes: Uint8Array): Promise<number> {
-  if (bytes.length === 0 || bytes.length > 30 * 1024 * 1024)
-    throw new PreviewPdfError("Choose a PDF between 1 byte and 30 MB.");
+  if (bytes.length === 0 || bytes.length > ebookLimitBytes)
+    throw new PreviewPdfError(`Choose a PDF between 1 byte and ${ebookLimitMb} MB.`);
   try {
     const document = await PDFDocument.load(bytes, { updateMetadata: false });
     const count = document.getPageCount();
@@ -16,8 +17,8 @@ export async function inspectPdf(bytes: Uint8Array): Promise<number> {
 }
 
 export async function makePreviewPdf(bytes: Uint8Array, pages: number, keepOnePrivate: boolean) {
-  if (bytes.length === 0 || bytes.length > 30 * 1024 * 1024)
-    throw new PreviewPdfError("Choose a PDF between 1 byte and 30 MB.");
+  if (bytes.length === 0 || bytes.length > ebookLimitBytes)
+    throw new PreviewPdfError(`Choose a PDF between 1 byte and ${ebookLimitMb} MB.`);
   if (!Number.isInteger(pages) || pages < 1)
     throw new PreviewPdfError("Enter a whole number of preview pages greater than zero.");
   let source: PDFDocument;
@@ -41,7 +42,7 @@ export async function makePreviewPdf(bytes: Uint8Array, pages: number, keepOnePr
   }
   excerpt.setTitle("BoiShelf preview");
   const output = await excerpt.save();
-  if (output.length > 30 * 1024 * 1024)
+  if (output.length > ebookLimitBytes)
     throw new PreviewPdfError("The preview is too large. Choose fewer pages or upload a smaller sample PDF.");
   return { bytes: output, sourcePages: total };
 }

@@ -13,11 +13,13 @@ npx supabase db push --dry-run
 npx supabase db push
 ```
 
-For an existing BoiShelf Supabase project, apply **only** the new `20261005055749_book_previews_and_archive.sql` migration before deploying the matching app version. If you previously used the SQL Editor, open that exact file, copy its complete contents into a new SQL Editor query, run it once, and confirm `book_previews` and `storage_cleanup_jobs` appear in Table Editor before deploying. Do not rerun the initial schema or an already-applied migration. If using the CLI instead, reconcile migration history before `db push`; do not mix methods blindly.
+For an existing BoiShelf Supabase project, apply each migration that has **not** run yet in filename order. If the preview migration has already succeeded, run only `20261007180000_ebook_limit_50mb.sql` for this update. In the SQL Editor, paste that file into a new query and run it once. Do not rerun the initial schema. If using the CLI instead, reconcile migration history before `db push`; do not mix methods blindly.
 
 The migrations create ten RLS-protected public tables and two **private** storage buckets (`ebooks`, `covers`). Browser roles can read only published metadata and their own orders/entitlements. Preview paths and cleanup jobs are service-only. They cannot alter purchases, upload objects or read ebook paths. The server secret is used only in server-only modules.
 
-For admin uploads, open **Storage → ebooks → Bucket settings** and allow individual files up to 30 MB, with PDF and EPUB MIME types. The bucket stays private. No additional migration or Render variable is needed for the signed, resumable PDF/EPUB upload flow.
+For admin uploads, open **Storage → ebooks → Bucket settings** and allow individual files up to 50 MB, with PDF and EPUB MIME types. The bucket stays private. Apply `20261007180000_ebook_limit_50mb.sql` to an existing Supabase project before uploading files over 30 MB. No new Render variable is needed.
+
+Supabase Free has a hard 50 MB maximum per file; a 100 MB single-file upload requires a paid plan or a different storage design. The global Storage limit must also allow 50 MB. The app checks the ebooks bucket limit before transferring a paid file and gives the owner a precise message if the new migration has not run. Separate sample PDFs remain capped at 30 MB because they pass through the Render preview-processing route.
 
 Set `.env.local` or Render environment variables:
 
