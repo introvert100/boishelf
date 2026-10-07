@@ -1530,6 +1530,57 @@ td a {
   background: #f8faf7;
 }
 .sample-file-help p { margin: 0 0 10px; }
+.preview-admin {
+  margin-top: 24px; padding: 18px;
+  border: 1px solid var(--line); border-radius: 12px;
+  background: var(--pale);
+}
+.preview-admin h3 { margin-top: 0; }
+.preview-admin label { display: block; margin: 12px 0; max-width: 420px; }
+.preview-admin input { display: block; width: 100%; margin-top: 6px; }
+.preview-admin .button { margin: 4px 8px 4px 0; }
+.success-toast {
+  position: fixed;
+  z-index: 80;
+  right: max(16px, env(safe-area-inset-right));
+  bottom: max(16px, env(safe-area-inset-bottom));
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: min(430px, calc(100vw - 32px));
+  padding: 12px 14px;
+  border: 1px solid #a4cbb0;
+  border-radius: 10px;
+  background: #eaf6ed;
+  color: #173e29;
+  box-shadow: 0 12px 35px #162f2440;
+}
+.success-toast span { flex: 1; }
+.preview-dialog {
+  width: min(920px, calc(100vw - 24px));
+  max-height: calc(100dvh - 24px);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 16px;
+  background: #fff;
+  color: var(--ink);
+}
+.preview-dialog::backdrop { background: #10251acc; }
+.preview-heading { display: flex; align-items: start; justify-content: space-between; gap: 15px; }
+.preview-heading h2 { margin: 0; }
+.preview-heading p { margin: 5px 0 13px; }
+.preview-frame { display: block; width: 100%; height: min(68dvh, 700px); border: 1px solid var(--line); margin: 8px 0 14px; }
+.confirm-dialog {
+  width: min(92vw, 520px); max-height: 85dvh; overflow: auto;
+  border: 1px solid var(--line); border-radius: 18px; padding: 28px;
+  background: var(--paper); color: var(--ink);
+  box-shadow: 0 20px 70px #10251a55;
+}
+.confirm-dialog::backdrop { background: #10251acc; }
+.confirm-dialog h2 { margin-top: 0; }
+.confirm-dialog .form-actions { display: flex; justify-content: flex-end; gap: 10px; }
+.button.danger { background: #a93030; color: #fff; border-color: #a93030; }
+@media (max-width: 600px) { .preview-heading { flex-direction: column; } .preview-frame { height: 58dvh; } }
 .upload-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

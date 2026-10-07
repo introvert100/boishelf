@@ -31,11 +31,11 @@ export async function POST(request: Request) {
     const db = serviceClient();
     const { data: book, error: be } = await db
       .from("books")
-      .select("id,published,is_demo,book_formats(id)")
+      .select("id,published,is_demo,archived_at,book_formats(id)")
       .eq("id", input.bookId)
       .maybeSingle();
     if (be) throw be;
-    if (!book?.published || !book.book_formats.length)
+    if (!book?.published || book.archived_at || !book.book_formats.length)
       throw new AppError(409, "This ebook is not available for purchase yet.");
     if (paymentMode() === "live" && book.is_demo)
       throw new AppError(

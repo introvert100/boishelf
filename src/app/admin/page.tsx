@@ -18,6 +18,7 @@ export default async function Page() {
     state,
     { data: orders, error: o },
     { data: policies, error: p },
+    { count: cleanupPending, error: c },
   ] = await Promise.all([
     getBooks(true),
     readiness(true),
@@ -27,8 +28,9 @@ export default async function Page() {
       .order("created_at", { ascending: false })
       .limit(200),
     db.from("policies").select("*"),
+    db.from("storage_cleanup_jobs").select("id", { count: "exact", head: true }).is("done_at", null),
   ]);
-  if (o || p) throw o || p;
+  if (o || p || c) throw o || p || c;
   return (
     <Admin
       books={books}
@@ -37,6 +39,7 @@ export default async function Page() {
       gates={state.gates}
       mode={state.mode}
       ownerId={user.id}
+      cleanupPending={cleanupPending || 0}
     />
   );
 }

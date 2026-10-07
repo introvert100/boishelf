@@ -108,6 +108,8 @@ export const demoBooks: Book[] = entries.map((e, i) => ({
   published: true,
   is_demo: true,
   featured: i < 3,
+  archived_at: null,
+  preview_pages: 0,
 }));
 export const categories = [
   { id: "all", bn: "সব বই", en: "All books" },

@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   Plus,
@@ -7,9 +7,12 @@ import {
   Circle,
   LoaderCircle,
   Pencil,
+  RotateCcw,
+  Trash2,
 } from "lucide-react";
 import { useLanguage, Price, statusLabel } from "./store";
 import { BookEditor } from "./book-editor";
+import { SuccessToast, type ToastMessage } from "./success-toast";
 import { draftKey, parseBookDraft, type BookFormValues } from "@/lib/book-draft";
 import type { Book, Order, Policy } from "@/lib/types";
 type Gate = { key: string; label: string; passed: boolean };
@@ -20,6 +23,7 @@ export function Admin({
   gates,
   mode,
   ownerId,
+  cleanupPending,
 }: {
   books: Book[];
   orders: Order[];
@@ -27,6 +31,7 @@ export function Admin({
   gates: Gate[];
   mode: string;
   ownerId: string;
+  cleanupPending: number;
 }) {
   const { t, locale } = useLanguage();
   const router = useRouter();
@@ -38,15 +43,28 @@ export function Admin({
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
-  const displayBooks = recentBook
+  const [toast, setToast] = useState<ToastMessage>(null);
+  const [removedIds, setRemovedIds] = useState<string[]>([]);
+  const [archiveOverrides, setArchiveOverrides] = useState<Record<string, string | null>>({});
+  const [deleteTarget, setDeleteTarget] = useState<Book | null>(null);
+  const [pendingCleanup, setPendingCleanup] = useState(cleanupPending);
+  const deleteDialog = useRef<HTMLDialogElement>(null);
+  const showToast = useCallback((message: string) => setToast({ id: Date.now(), text: message }), []);
+  const dismissToast = useCallback(() => setToast(null), []);
+  const displayBooks = (recentBook
     ? books.some((book) => book.id === recentBook.id)
       ? books.map((book) => book.id === recentBook.id ? recentBook : book)
       : [recentBook, ...books]
-    : books;
+    : books).filter((book) => !removedIds.includes(book.id)).map((book) =>
+      Object.hasOwn(archiveOverrides, book.id)
+        ? { ...book, archived_at: archiveOverrides[book.id], published: archiveOverrides[book.id] ? false : book.published }
+        : book);
+  const visibleBooks = displayBooks.filter((book) => tab === "archived" ? !!book.archived_at : !book.archived_at);
   useEffect(() => {
     try { setSavedDraft(parseBookDraft(window.localStorage.getItem(draftKey(ownerId)))); }
     catch { setSavedDraft(null); }
   }, [ownerId]);
+  useEffect(() => { setPendingCleanup(cleanupPending); }, [cleanupPending]);
   async function send(url: string, body: unknown) {
     const res = await fetch(url, {
       method: "POST",
@@ -68,13 +86,61 @@ export function Admin({
         ...Object.fromEntries(data),
         published: data.get("published") === "on",
       });
-      setNotice(t("নীতিমালা সংরক্ষিত হয়েছে।", "Policy saved."));
+      showToast(t("নীতিমালা সংরক্ষিত হয়েছে।", "Policy saved."));
       router.refresh();
     } catch (e) {
       setError((e as Error).message);
     } finally {
       setBusy(false);
     }
+  }
+  function askDelete(book: Book) {
+    setDeleteTarget(book);
+    deleteDialog.current?.showModal();
+  }
+  async function deleteBook() {
+    if (!deleteTarget || busy) return;
+    setBusy(true); setError("");
+    try {
+      const response = await fetch(`/api/admin/books/${deleteTarget.id}`, { method: "DELETE" });
+      const result = await response.json();
+      if (!response.ok) throw new Error(`${result.error || "Delete failed."}${result.requestId ? ` (request ${result.requestId})` : ""}`);
+      if (result.action === "archived") {
+        setArchiveOverrides((current) => ({ ...current, [deleteTarget.id]: new Date().toISOString() }));
+        showToast(t("অর্ডার থাকায় বইটি আর্কাইভ করা হয়েছে। আগের ক্রেতারা ডাউনলোড করতে পারবেন।", "Book archived because orders exist. Existing buyers keep their downloads."));
+      } else {
+        setRemovedIds((current) => [...current, deleteTarget.id]);
+        if (result.cleanupPending) setPendingCleanup((current) => current + 1);
+        showToast(result.cleanupPending ? t("বই মুছে ফেলা হয়েছে। কিছু ফাইল পরিষ্কার করা বাকি আছে।", "Book deleted. Some file cleanup is pending.") : t("বই ও ফাইল মুছে ফেলা হয়েছে।", "Book and files deleted."));
+      }
+      if (editing === deleteTarget.id) setEditing(null);
+      if (recentBook?.id === deleteTarget.id) setRecentBook(null);
+      deleteDialog.current?.close();
+      router.refresh();
+    } catch (failure) { setError((failure as Error).message); deleteDialog.current?.close(); }
+    finally { setBusy(false); }
+  }
+  async function restoreBook(book: Book) {
+    if (busy) return;
+    setBusy(true); setError("");
+    try {
+      await send(`/api/admin/books/${book.id}/restore`, {});
+      setArchiveOverrides((current) => ({ ...current, [book.id]: null }));
+      showToast(t("বইটি খসড়া হিসেবে ফিরেছে। প্রকাশের আগে যাচাই করুন।", "Book restored as a draft. Review it before publishing."));
+      router.refresh();
+    } catch (failure) { setError((failure as Error).message); }
+    finally { setBusy(false); }
+  }
+  async function retryCleanup() {
+    if (busy) return;
+    setBusy(true); setError("");
+    try {
+      const result = await send("/api/admin/storage-cleanup", {});
+      setPendingCleanup(result.remaining || 0);
+      showToast(result.remaining ? t("কিছু ফাইল এখনো পরিষ্কার হয়নি। পরে আবার চেষ্টা করুন।", "Some files still need cleanup. Retry later.") : t("ফাইল পরিষ্কার করা হয়েছে।", "File cleanup completed."));
+      router.refresh();
+    } catch (failure) { setError((failure as Error).message); }
+    finally { setBusy(false); }
   }
   return (
     <div className="container page">
@@ -107,7 +173,7 @@ export function Admin({
       </div>
       <div className="admin-stats">
         <div className="panel">
-          <strong>{displayBooks.length}</strong>
+          <strong>{displayBooks.filter((book) => !book.archived_at).length}</strong>
           <span>{t("ক্যাটালগে বই", "Books in catalogue")}</span>
         </div>
         <div className="panel">
@@ -124,6 +190,7 @@ export function Admin({
       <div className="admin-tabs" role="group" aria-label="Admin sections">
         {[
           ["books", "বই", "Books"],
+          ["archived", "আর্কাইভ", "Archived"],
           ["orders", "অর্ডার", "Orders"],
           ["policies", "নীতিমালা", "Policies"],
           ["launch", "প্রকাশের প্রস্তুতি", "Launch readiness"],
@@ -152,6 +219,10 @@ export function Admin({
           {notice}
         </p>
       )}
+      {pendingCleanup > 0 && <div className="notice" role="status">
+        {t("কিছু পুরোনো ফাইল পরিষ্কার করা বাকি আছে।", "Some old files are pending cleanup.")}{" "}
+        <button className="button secondary" type="button" disabled={busy} onClick={() => void retryCleanup()}>{t("আবার চেষ্টা করুন", "Retry cleanup")}</button>
+      </div>}
       {tab === "books" && (
         <>
           {savedDraft && !editing && (
@@ -178,6 +249,14 @@ export function Admin({
             restored={editing === "new" ? restoredDraft : null}
             onClose={() => { setEditing(null); setRestoredDraft(null); }}
             onDraftChange={setSavedDraft}
+            onSuccess={showToast}
+            onPreviewSaved={(id, pages, sourcePages, sourceKind) => {
+              setRecentBook((current) => {
+                const existing = current?.id === id ? current : books.find((book) => book.id === id);
+                return existing ? { ...existing, preview_pages: pages, preview_source_pages: sourcePages,
+                  preview_source_kind: sourceKind || undefined } : current;
+              });
+            }}
             onSaved={(id, values) => {
               const existing = recentBook?.id === id ? recentBook : books.find((book) => book.id === id);
               setRecentBook({
@@ -189,8 +268,12 @@ export function Admin({
                 cover_style: values.cover_style, cover_path: existing?.cover_path || null,
                 formats: existing?.formats || [], format_names: existing?.format_names,
                 published: values.published, is_demo: values.is_demo, featured: values.featured,
+                archived_at: existing?.archived_at || null,
+                preview_pages: existing?.preview_pages || 0,
+                preview_source_pages: existing?.preview_source_pages,
+                preview_source_kind: existing?.preview_source_kind,
               });
-              setNotice(editing === "new" ? t("খসড়া সংরক্ষিত হয়েছে। নিচে ফাইল আপলোড করুন।", "Draft saved. Upload its files below.") : "");
+              setNotice("");
               setEditing(id); setRestoredDraft(null);
             }}
             onUploaded={(id, kind, name, path) => {
@@ -215,7 +298,7 @@ export function Admin({
                 </tr>
               </thead>
               <tbody>
-                {displayBooks.map((book) => (
+                {visibleBooks.map((book) => (
                   <tr key={book.id}>
                     <td>
                       {locale === "bn" ? book.title_bn : book.title_en}
@@ -240,6 +323,7 @@ export function Admin({
                       >
                         <Pencil size={16} />
                       </button>
+                      <button className="icon-button" type="button" aria-label={`${t("মুছুন", "Delete")} ${book.title_en}`} onClick={() => askDelete(book)}><Trash2 size={16} /></button>
                     </td>
                   </tr>
                 ))}
@@ -248,6 +332,14 @@ export function Admin({
           </div>
         </>
       )}
+      {tab === "archived" && <div className="table-wrap">
+        {visibleBooks.length === 0 ? <p className="notice">{t("আর্কাইভে কোনো বই নেই।", "No archived books.")}</p> : <table><thead><tr>
+          <th>{t("বই", "Book")}</th><th>{t("ফাইল", "Files")}</th><th>{t("কাজ", "Actions")}</th>
+        </tr></thead><tbody>{visibleBooks.map((book) => <tr key={book.id}>
+          <td>{locale === "bn" ? book.title_bn : book.title_en}</td><td>{book.formats.join(", ") || "—"}</td>
+          <td><button type="button" className="button secondary" disabled={busy} onClick={() => void restoreBook(book)}><RotateCcw size={16} /> {t("খসড়ায় ফিরিয়ে আনুন", "Restore as draft")}</button></td>
+        </tr>)}</tbody></table>}
+      </div>}
       {tab === "orders" && (
         <>
           <p>
@@ -371,6 +463,16 @@ export function Admin({
           </ul>
         </div>
       )}
+      <dialog ref={deleteDialog} className="confirm-dialog" aria-labelledby="delete-title" onClose={() => setDeleteTarget(null)}>
+        <h2 id="delete-title">{t("বই মুছবেন?", "Delete this book?")}</h2>
+        <p>{deleteTarget && (locale === "bn" ? deleteTarget.title_bn : deleteTarget.title_en)}</p>
+        <p>{t("বইটির কোনো অর্ডার থাকলে এটি দোকান থেকে সরিয়ে আর্কাইভ হবে; আগের ক্রেতারা ডাউনলোড করতে পারবেন। অর্ডার না থাকলে বই ও ফাইল স্থায়ীভাবে মুছে যাবে।", "If this book has any orders, it will be archived and removed from the shop; buyers keep their downloads. Otherwise, the book and its files will be permanently deleted.")}</p>
+        <div className="form-actions">
+          <button type="button" className="button secondary" disabled={busy} onClick={() => deleteDialog.current?.close()}>{t("বাতিল", "Cancel")}</button>
+          <button type="button" className="button danger" disabled={busy} onClick={() => void deleteBook()}>{busy ? t("অপেক্ষা করুন…", "Working…") : t("মুছুন", "Delete")}</button>
+        </div>
+      </dialog>
+      <SuccessToast toast={toast} onDismiss={dismissToast} />
     </div>
   );
 }

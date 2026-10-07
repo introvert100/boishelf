@@ -22,7 +22,9 @@ Refunds are not automated in this release. Complete any eligible refund through 
 
 ## Files and backups
 
-Supabase holds all records and files; Render restarts and deploys do not remove them. New uploads use unique object paths. Replacing a format keeps the previous object for rollback, so periodically review unused old files before removing any. Never delete objects while their paths remain referenced in `book_formats` or `books.cover_path`.
+Supabase holds all records and files; Render restarts and deploys do not remove them. New uploads use unique object paths. Replacing a format keeps the previous paid object for rollback. Preview excerpts live in the private `ebooks` bucket; only the excerpt receives a five-minute signed public link. Visitors may save that excerpt. A failed excerpt replacement leaves the prior preview active.
+
+Deleting an unsold book removes its database records in one transaction and adds its private objects, including older objects under its book ID folder, to `storage_cleanup_jobs`. Storage deletion then uses the Storage API. If a cleanup call fails, the admin page shows **Retry cleanup**; never delete `storage.objects` rows directly. A book with any order is archived instead. Archived books cannot be purchased or publicly previewed, while existing entitlements and downloads remain valid.
 
 Before real sales, establish database backups and a **separate** Storage object backup. Database backups alone do not contain ebook bytes. Test restoration in an isolated project with matching storage paths and access policies. Review Supabase's current plan-specific backup/retention options and storage quotas; no backup job is provisioned automatically in this disconnected environment.
 
@@ -30,7 +32,7 @@ Before real sales, establish database backups and a **separate** Storage object 
 
 1. If payments or fulfillment are malfunctioning, set `LIVE_PAYMENTS_ENABLED=false`. Keep the callback routes running so already paid orders can still be validated and delivered.
 2. In Render, roll back to the last known-good deploy. Disable automatic deployment temporarily if necessary. Retain the same secrets and Supabase project.
-3. Database migrations are append-only after deployment. Never undo a schema change by deleting the migration or running `db reset` against production. Prefer a forward corrective migration compatible with the previous app version.
+3. Database migrations are append-only after deployment. Apply `20261005055749_book_previews_and_archive.sql` before deploying this release. The previous application version can run against the added columns/tables if you need to roll back app code. Never undo a schema change by deleting the migration or running `db reset` against production. Prefer a forward corrective migration compatible with the previous app version.
 4. Recheck liveness, authenticated dependency readiness, one customer's order visibility and protected downloads. Reconcile pending payments before reopening checkout.
 
 ## Security administration

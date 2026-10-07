@@ -8,6 +8,13 @@ export async function POST(request: Request) {
     await requireOwner();
     const { id, ...values } = bookInput.parse(await jsonBody(request));
     const db = serviceClient();
+    if (id) {
+      const { data: existing, error: lookup } = await db.from("books")
+        .select("archived_at").eq("id", id).maybeSingle();
+      if (lookup) throw lookup;
+      if (!existing) throw new AppError(404, "Book not found. Refresh the admin page.");
+      if (existing.archived_at) throw new AppError(409, "Restore this archived book before editing or publishing it.");
+    }
     if (values.published) {
       if (!id)
         throw new AppError(

@@ -21,7 +21,7 @@ Copy `.env.example` to `.env.local` and follow [the deployment guide](docs/DEPLO
 - Passwordless Gmail codes with server-verified OTP sessions and Turnstile protection; no Google Cloud, password, phone, or guest checkout.
 - Supabase PostgreSQL schema and RLS policies for customers, books, orders and entitlements.
 - Private PDF/EPUB storage with purchase checks and 60-second signed download links.
-- `/admin` for the explicitly configured owner: draft/publish books, upload cover/PDF/EPUB files, inspect orders and publish the owner's policy text.
+- `/admin` for the explicitly configured owner: draft/publish books, upload cover/PDF/EPUB files, set public PDF previews, archive or delete books, inspect orders and publish the owner's policy text.
 - SSLCOMMERZ initiation, IPN/return handling, validation, pending-order reconciliation and atomic/idempotent fulfillment.
 - Separate sandbox/live entitlements; real payments gated by launch settings and real content.
 - Render Blueprint, GitHub CI, optional scheduled production health checks, and structured server error logs.
@@ -33,6 +33,10 @@ Sign in with the Gmail address configured as `ADMIN_EMAIL`, then open `/admin` a
 The saved book shows separate controls for a cover image (PNG/JPG/WebP, up to 5 MB), PDF (up to 30 MB), and EPUB (up to 30 MB). Upload either PDF or EPUB to make publishing possible. A non-sample book also needs a cover. The publishing checklist shows what is missing and the saved status stays visible after an unsuccessful attempt. Then select **Published** and save again. A sample checkbox only marks the book as a sample; for sandbox testing, save it as a sample and use **Create test PDF** to add a one-page original file, or upload your own PDF/EPUB. Uploading a new file of the same type replaces the active one; the previous private object remains available for rollback as described in [operations](docs/OPERATIONS.md).
 
 Unfinished new-book details are saved only in this browser for the signed-in owner. After a refresh, choose **Restore draft** or **Discard draft**. Saving the book clears that browser draft.
+
+After uploading a paid PDF, set **Preview pages** to a number from 0 through one less than that PDF's page count, then choose **Save preview**. Zero disables it; a one-page paid PDF cannot be previewed automatically. For an EPUB-only book, upload a separate sample PDF in the Preview section and choose how many of its pages visitors may read. The public book page opens only the generated excerpt; the private ebook still requires a purchase. Success toasts appear after server-confirmed saves, uploads, preview changes and policy updates.
+
+To remove a book, choose its trash button and read the confirmation. Books with any order move to **Archived** and disappear from the shop; existing buyers keep downloads. Restore an archived book as a draft from the **Archived** tab. Books without orders are permanently removed and their private files are queued for cleanup. If cleanup remains, use **Retry cleanup** in admin.
 
 ## Checks
 

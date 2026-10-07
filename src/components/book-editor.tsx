@@ -8,6 +8,7 @@ import { categories } from "@/lib/demo";
 import { blankBook, bookValues, draftKey, type BookFormValues } from "@/lib/book-draft";
 import type { Book } from "@/lib/types";
 import { useLanguage } from "./store";
+import { PreviewDialog } from "./preview-dialog";
 
 const uploadKinds: UploadKind[] = ["cover", "pdf", "epub"];
 type UploadState = { progress: number; filename: string; phase: "uploading" | "processing" | "done" | "error"; error?: string; replaced?: boolean };
@@ -56,9 +57,17 @@ const bnErrors: Record<string, string> = {
   "Save this book as a sample before adding a test PDF.": "পরীক্ষার PDF যোগ করার আগে বইটি নমুনা হিসেবে সংরক্ষণ করুন।",
   "A PDF is already uploaded. Use the PDF upload control to replace it.": "PDF ইতিমধ্যে আছে। বদলাতে PDF আপলোড ব্যবহার করুন।",
   "Unpublish this book before changing its test file.": "পরীক্ষার ফাইল বদলানোর আগে বইটি অপ্রকাশিত করুন।",
+  "Choose a sample PDF.": "একটি নমুনা PDF বেছে নিন।",
+  "This PDF is corrupt, encrypted, or unsupported. Upload an unprotected sample PDF instead.": "PDF-টি নষ্ট, পাসওয়ার্ড-সুরক্ষিত বা সমর্থিত নয়। পাসওয়ার্ড ছাড়া একটি নমুনা PDF আপলোড করুন।",
+  "Upload a PDF ebook or a separate sample PDF before enabling previews.": "প্রিভিউ চালু করার আগে ইবুক PDF অথবা আলাদা নমুনা PDF আপলোড করুন।",
+  "The PDF page count is not supported.": "এই PDF-এর পৃষ্ঠা সংখ্যা সমর্থিত নয়।",
+  "The preview is too large. Choose fewer pages or upload a smaller sample PDF.": "প্রিভিউ ফাইলটি বড়। কম পৃষ্ঠা নিন অথবা ছোট নমুনা PDF আপলোড করুন।",
+  "Could not read the preview source PDF.": "প্রিভিউর উৎস PDF পড়া যায়নি। আবার চেষ্টা করুন।",
+  "This book already has a PDF ebook. Set its preview page count instead.": "এই বইয়ে PDF আছে। আলাদা নমুনা আপলোড না করে প্রিভিউ পৃষ্ঠা সংখ্যা ঠিক করুন।",
+  "Upload the EPUB ebook before adding a sample PDF.": "নমুনা PDF যোগ করার আগে EPUB আপলোড করুন।",
 };
 
-function uploadFile(bookId: string, kind: UploadKind, file: File, onProgress: (progress: number) => void): Promise<{ name: string; path?: string }> {
+function uploadFile(bookId: string, kind: UploadKind, file: File, onProgress: (progress: number) => void): Promise<{ name: string; path?: string; previewPages?: number; sourcePages?: number }> {
   return new Promise((resolve, reject) => {
     const form = new FormData();
     form.set("bookId", bookId);
@@ -71,9 +80,10 @@ function uploadFile(bookId: string, kind: UploadKind, file: File, onProgress: (p
     };
     xhr.onerror = () => reject(new Error("Network error. Check your connection and try again."));
     xhr.onload = () => {
-      let result: { error?: string; requestId?: string; name?: string; path?: string } = {};
+      let result: { error?: string; requestId?: string; name?: string; path?: string; previewPages?: number; sourcePages?: number } = {};
       try { result = JSON.parse(xhr.responseText); } catch { /* The server may have returned an HTML error page. */ }
-      if (xhr.status >= 200 && xhr.status < 300) resolve({ name: result.name || file.name, path: result.path });
+      if (xhr.status >= 200 && xhr.status < 300) resolve({ name: result.name || file.name, path: result.path,
+        previewPages: result.previewPages, sourcePages: result.sourcePages });
       else reject(new Error(`${result.error || "Upload failed. Please retry."}${result.requestId ? ` (request ${result.requestId})` : ""}`));
     };
     xhr.send(form);
@@ -81,7 +91,7 @@ function uploadFile(bookId: string, kind: UploadKind, file: File, onProgress: (p
 }
 
 export function BookEditor({
-  book, ownerId, sandbox, restored, onSaved, onUploaded, onClose, onDraftChange,
+  book, ownerId, sandbox, restored, onSaved, onUploaded, onPreviewSaved, onSuccess, onClose, onDraftChange,
 }: {
   book?: Book;
   ownerId: string;
@@ -89,6 +99,8 @@ export function BookEditor({
   restored?: BookFormValues | null;
   onSaved: (id: string, values: BookFormValues) => void;
   onUploaded: (id: string, kind: UploadKind, name: string, path?: string) => void;
+  onPreviewSaved: (id: string, pages: number, sourcePages: number, sourceKind: "book_pdf" | "sample_pdf" | null) => void;
+  onSuccess: (message: string) => void;
   onClose: () => void;
   onDraftChange: (values: BookFormValues | null) => void;
 }) {
@@ -101,6 +113,9 @@ export function BookEditor({
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
   const [uploads, setUploads] = useState<Partial<Record<UploadKind, UploadState>>>({});
+  const [previewCount, setPreviewCount] = useState(String(book?.preview_pages || 0));
+  const [previewError, setPreviewError] = useState("");
+  const [previewOpen, setPreviewOpen] = useState(false);
   const hasEbook = !!book?.formats.some((format) => format === "PDF" || format === "EPUB") || uploads.pdf?.phase === "done" || uploads.epub?.phase === "done";
   const hasCover = !!book?.cover_path || uploads.cover?.phase === "done";
   const missingPublicationFile = !hasEbook
@@ -109,7 +124,16 @@ export function BookEditor({
       ? "Upload a cover before publishing a real book."
       : null;
 
-  function localize(message: string) { return locale === "bn" ? bnErrors[message] || message : message; }
+  function localize(message: string) {
+    if (locale !== "bn") return message;
+    const suffix = / \(request [a-f0-9-]{36}\)$/.exec(message)?.[0] || "";
+    const base = suffix ? message.slice(0, -suffix.length) : message;
+    const maximum = /^Choose at most (\d+) preview pages so at least one page stays private\.$/.exec(base);
+    if (maximum) return `শেষ পৃষ্ঠাটি ক্রেতাদের জন্য রাখতে সর্বোচ্চ ${maximum[1]} পৃষ্ঠা প্রিভিউ দিন।${suffix}`;
+    const sample = /^This sample PDF has only (\d+) pages\.$/.exec(base);
+    if (sample) return `নমুনা PDF-এ মাত্র ${sample[1]} পৃষ্ঠা আছে।${suffix}`;
+    return `${bnErrors[base] || base}${suffix}`;
+  }
   function change(field: keyof BookFormValues, value: string | boolean) {
     const next = { ...values, [field]: value } as BookFormValues;
     setValues(next);
@@ -171,7 +195,10 @@ export function BookEditor({
         onDraftChange(null);
       }
       onSaved(result.id, values);
-      setNotice(t("বই সংরক্ষিত হয়েছে।", "Book saved."));
+      onSuccess(!book ? t("খসড়া সংরক্ষিত হয়েছে। নিচে ফাইল আপলোড করুন।", "Draft saved. Upload files below.")
+        : values.published && !book.published ? t("বই প্রকাশিত হয়েছে।", "Book published.")
+        : !values.published && book.published ? t("বইটি অপ্রকাশিত হয়েছে।", "Book unpublished.")
+        : t("পরিবর্তন সংরক্ষিত হয়েছে।", "Changes saved."));
       router.refresh();
     } catch {
       setFormError(t("সংযোগে সমস্যা হয়েছে। লেখা সংরক্ষিত আছে; আবার চেষ্টা করুন।", "Connection failed. Your entries are still here; please retry."));
@@ -195,6 +222,10 @@ export function BookEditor({
       });
       setUploads((current) => ({ ...current, [kind]: { phase: "done", progress: 100, filename: result.name, replaced: existing } }));
       onUploaded(book.id, kind, result.name, result.path);
+      if (kind === "pdf" && result.previewPages !== undefined)
+        onPreviewSaved(book.id, result.previewPages, result.sourcePages || 0,
+          result.previewPages > 0 ? "book_pdf" : null);
+      onSuccess(t(`${kind.toUpperCase()} ফাইল সংরক্ষিত হয়েছে।`, `${kind.toUpperCase()} uploaded successfully.`));
       router.refresh();
     } catch (error) {
       setUploads((current) => ({ ...current, [kind]: { phase: "error", progress: 0, filename: file.name, error: (error as Error).message } }));
@@ -213,11 +244,52 @@ export function BookEditor({
       if (!response.ok) throw new Error(`${result.error || "Could not create test PDF."}${result.requestId ? ` (request ${result.requestId})` : ""}`);
       setUploads((current) => ({ ...current, pdf: { phase: "done", progress: 100, filename: result.name } }));
       onUploaded(book.id, "pdf", result.name);
-      setNotice(t("পরীক্ষার PDF তৈরি হয়েছে। এখন বইটি প্রকাশ করতে পারেন।", "Test PDF created. You can now publish the book."));
+      onSuccess(t("পরীক্ষার PDF তৈরি হয়েছে। এখন বইটি প্রকাশ করতে পারেন।", "Test PDF created. You can now publish the book."));
       router.refresh();
     } catch (error) {
       setFormError(localize((error as Error).message));
     } finally { busyRef.current = false; setBusy(false); }
+  }
+
+  async function savePreview() {
+    if (!book?.id || busyRef.current) return;
+    if (!/^\d+$/.test(previewCount.trim())) {
+      setPreviewError(t("০ বা তার বেশি পূর্ণসংখ্যা লিখুন।", "Enter zero or a whole number of pages."));
+      return;
+    }
+    const pages = Number(previewCount);
+    if (pages > 20000) { setPreviewError(t("পৃষ্ঠা সংখ্যা ২০,০০০-এর বেশি হতে পারে না।", "Preview page count cannot exceed 20,000.")); return; }
+    busyRef.current = true; setBusy(true); setPreviewError("");
+    try {
+      const response = await fetch(`/api/admin/books/${book.id}/preview`, {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pages }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(`${result.error || "Preview could not be saved."}${result.requestId ? ` (request ${result.requestId})` : ""}`);
+      onPreviewSaved(book.id, result.previewPages, result.sourcePages || 0, result.sourceKind || null);
+      onSuccess(pages === 0 ? t("প্রিভিউ বন্ধ হয়েছে।", "Preview disabled.") : t("প্রিভিউ তৈরি ও সংরক্ষিত হয়েছে।", "Preview generated and saved."));
+      router.refresh();
+    } catch (error) { setPreviewError(localize((error as Error).message)); }
+    finally { busyRef.current = false; setBusy(false); }
+  }
+
+  async function uploadPreviewSource(file?: File) {
+    if (!book?.id || !file || busyRef.current) return;
+    const problem = uploadProblem("pdf", file.name, file.size);
+    if (problem) { setPreviewError(localize(problem)); return; }
+    if (!/^\d+$/.test(previewCount.trim()) || Number(previewCount) > 20000) { setPreviewError(t("০ থেকে ২০,০০০-এর মধ্যে পূর্ণসংখ্যা লিখুন।", "Enter a whole number from 0 to 20,000.")); return; }
+    busyRef.current = true; setBusy(true); setPreviewError("");
+    try {
+      const form = new FormData();
+      form.set("file", file); form.set("pages", previewCount.trim());
+      const response = await fetch(`/api/admin/books/${book.id}/preview-source`, { method: "POST", body: form });
+      const result = await response.json();
+      if (!response.ok) throw new Error(`${result.error || "Sample PDF could not be saved."}${result.requestId ? ` (request ${result.requestId})` : ""}`);
+      onPreviewSaved(book.id, result.previewPages, result.sourcePages, "sample_pdf");
+      onSuccess(t("নমুনা PDF সংরক্ষিত হয়েছে।", "Sample PDF uploaded and preview saved."));
+      router.refresh();
+    } catch (error) { setPreviewError(localize((error as Error).message)); }
+    finally { busyRef.current = false; setBusy(false); }
   }
 
   function fieldError(field: string) {
@@ -305,6 +377,24 @@ export function BookEditor({
           {state?.phase === "uploading" && <progress value={state.progress} max="100" aria-label={`${kind.toUpperCase()} upload progress`} />}
         </div>;
       })}</div>
+      <div className="preview-admin">
+        <h3>{t("বিনামূল্যে পড়ার প্রিভিউ", "Free reading preview")}</h3>
+        <p>{t("কত পৃষ্ঠা বিনামূল্যে দেখা যাবে তা ঠিক করুন। ০ লিখলে প্রিভিউ বন্ধ থাকবে। আসল PDF-এর অন্তত শেষ পৃষ্ঠাটি কেবল ক্রেতাদের জন্য থাকবে।", "Choose how many pages visitors can read. Enter 0 to disable. At least the last page of the paid PDF stays private.")}</p>
+        <label htmlFor="preview-pages">{t("প্রিভিউ পৃষ্ঠা সংখ্যা", "Preview pages")}
+          <input id="preview-pages" inputMode="numeric" value={previewCount} onChange={(event) => { setPreviewCount(event.target.value); setPreviewError(""); }} aria-invalid={!!previewError} aria-describedby={previewError ? "preview-error" : "preview-help"} />
+        </label>
+        <p id="preview-help" className="field-help">{t("বর্তমানে সংরক্ষিত:", "Currently saved:")} {book.preview_pages || 0} · {book.preview_source_pages ? `${book.preview_source_pages} ${t("পৃষ্ঠা উৎস PDF-এ", "pages in source PDF")}` : t("এখনো উৎস PDF যাচাই হয়নি", "source PDF not inspected yet")}</p>
+        {previewError && <p id="preview-error" className="field-error" role="alert">{previewError}</p>}
+        {book.formats.includes("PDF") ? <button type="button" className="button secondary" disabled={busy} onClick={() => void savePreview()}>{t("প্রিভিউ সংরক্ষণ করুন", "Save preview")}</button> : book.formats.includes("EPUB") ? <>
+          <p className="field-help">{t("শুধু EPUB থাকলে আলাদা নমুনা PDF আপলোড করুন। সেই ফাইলের প্রথম নির্বাচিত পৃষ্ঠাগুলো দেখানো হবে।", "For an EPUB-only book, upload a separate sample PDF. Visitors see its first selected pages.")}</p>
+          <label htmlFor="preview-source">{t("নমুনা PDF · সর্বোচ্চ ৩০ MB", "Sample PDF · up to 30 MB")}
+            <input id="preview-source" type="file" accept=".pdf,application/pdf" disabled={busy} onChange={(event) => { void uploadPreviewSource(event.target.files?.[0]); event.target.value = ""; }} />
+          </label>
+          {book.preview_source_kind === "sample_pdf" && <button type="button" className="button secondary" disabled={busy} onClick={() => void savePreview()}>{t("পৃষ্ঠা সংখ্যা পরিবর্তন করুন", "Update page count")}</button>}
+        </> : <p className="field-help">{t("প্রথমে PDF অথবা EPUB আপলোড করুন।", "Upload a PDF or EPUB first.")}</p>}
+        {!!book.preview_pages && <button type="button" className="button secondary" onClick={() => setPreviewOpen(true)}>{t("দর্শকের মতো প্রিভিউ দেখুন", "View preview as visitor")}</button>}
+      </div>
+      <PreviewDialog bookId={book.id} admin open={previewOpen} onClose={() => setPreviewOpen(false)} />
     </section> : <p className="field-help file-step">{t("প্রথমে তথ্য সংরক্ষণ করুন। তারপর এখানে প্রচ্ছদ, PDF ও EPUB আপলোডের ঘর দেখা যাবে।", "Save the book information first. The cover, PDF, and EPUB upload controls will appear here.")}</p>}
   </div>;
 }

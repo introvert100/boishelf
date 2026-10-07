@@ -4,7 +4,7 @@
 
 Create a standard PostgreSQL Supabase project, preferably near Render's Singapore region. Do not select an experimental database engine. Keep pilot and commercial production in separate Supabase projects if possible; this makes sandbox isolation and rollback simpler.
 
-Apply `supabase/migrations/20261002043706_initial_store.sql` through the Supabase CLI after authenticating and linking the project:
+Apply all unapplied files in `supabase/migrations/` in filename order through the Supabase CLI after authenticating and linking the project:
 
 ```sh
 npx supabase login
@@ -13,9 +13,9 @@ npx supabase db push --dry-run
 npx supabase db push
 ```
 
-Alternatively run the migration once in the project's SQL Editor for an initial empty project, then reconcile migration history before later CLI migrations. Do not rerun it against an existing schema or edit a migration already applied in production.
+For an existing BoiShelf Supabase project, apply **only** the new `20261005055749_book_previews_and_archive.sql` migration before deploying the matching app version. If you previously used the SQL Editor, open that exact file, copy its complete contents into a new SQL Editor query, run it once, and confirm `book_previews` and `storage_cleanup_jobs` appear in Table Editor before deploying. Do not rerun the initial schema or an already-applied migration. If using the CLI instead, reconcile migration history before `db push`; do not mix methods blindly.
 
-The migration creates eight RLS-protected public tables and two **private** storage buckets (`ebooks`, `covers`). Browser roles can read only published metadata and their own orders/entitlements. They cannot alter purchases, upload objects or read ebook paths. The server secret is used only in server-only modules.
+The migrations create ten RLS-protected public tables and two **private** storage buckets (`ebooks`, `covers`). Browser roles can read only published metadata and their own orders/entitlements. Preview paths and cleanup jobs are service-only. They cannot alter purchases, upload objects or read ebook paths. The server secret is used only in server-only modules.
 
 Set `.env.local` or Render environment variables:
 
@@ -78,6 +78,8 @@ The script uploads real PDF/EPUB sample files to private storage and inserts cle
 4. Enter the environment variables marked `sync: false`. For a catalogue-only preview, credentials can remain unconfigured, but real authentication/checkout require them. Use the assigned `https://NAME.onrender.com` origin for `NEXT_PUBLIC_APP_URL` and update Supabase's redirect settings to match.
 5. Render runs `npm ci && npm run build`, starts on `0.0.0.0:$PORT`, and checks `/api/health`. `autoDeployTrigger: checksPass` waits for GitHub checks before deploying commits on `main`.
 6. Confirm a live deploy, HTTP 200 health response, Gmail code delivery and login, and an actual SSLCOMMERZ sandbox purchase/download. Review Render logs for authentication, callback or download failures.
+
+For this preview/delete release, confirm the new migration is present **before** Render deploys new code. In `/admin`, test a multi-page PDF preview, an EPUB-only sample PDF, preview off, a rejected one-page paid PDF preview, a draft deletion, and archive/restore of a book with an order. Verify the archived buyer can still download and that an anonymous visitor cannot reach the full ebook. The free Render instance has 512 MB RAM: test your own largest PDF on the pilot and inspect memory/logs before relying on bulk preview generation.
 
 Render's free web service can spin down; its filesystem is ephemeral. Never store uploaded ebooks or authoritative records on Render disk. Supabase's free quotas and inactivity behavior also need review. Free service limits are suitable for this chosen pilot, not a reliability guarantee for paid customers.
 

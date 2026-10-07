@@ -40,6 +40,7 @@ import { categories } from "@/lib/demo";
 import { browserClient } from "@/lib/supabase-browser";
 import { isGmailUser } from "@/lib/security";
 import { Turnstile } from "@/components/turnstile";
+import { PreviewDialog } from "@/components/preview-dialog";
 
 const Language = createContext<{
   locale: Locale;
@@ -73,7 +74,9 @@ export function Shell({
 }) {
   const [locale, setLocale] = useState(initialLocale);
   const [menu, setMenu] = useState(false);
+  const [hydrated, setHydrated] = useState(false);
   const t = (bn: string, en: string) => (locale === "bn" ? bn : en);
+  useEffect(() => { setHydrated(true); }, []);
   useEffect(() => {
     document.documentElement.lang = locale;
   }, [locale]);
@@ -125,6 +128,7 @@ export function Shell({
           <div className="header-actions">
             <button
               className="language-button"
+              disabled={!hydrated}
               onClick={switchLanguage}
               aria-label={
                 locale === "bn" ? "Switch to English" : "বাংলায় দেখুন"
@@ -559,6 +563,7 @@ export function Catalogue({ books }: { books: Book[] }) {
 
 export function BookDetail({ book }: { book: Book }) {
   const { locale, t } = useLanguage();
+  const [previewOpen, setPreviewOpen] = useState(false);
   return (
     <div className="container page">
       <div className="breadcrumbs">
@@ -609,6 +614,9 @@ export function BookDetail({ book }: { book: Book }) {
           <Link className="button wide" href={`/checkout/${book.slug}`}>
             {t("এখনই কিনুন", "Buy this ebook")}
           </Link>
+          {!!book.preview_pages && <button type="button" className="button secondary wide" onClick={() => setPreviewOpen(true)}>
+            {t(`প্রথম ${book.preview_pages} পৃষ্ঠা পড়ুন`, `Read ${book.preview_pages}-page preview`)}
+          </button>}
           <p className="secure-note">
             <ShieldCheck size={16} />
             {t(
@@ -626,6 +634,7 @@ export function BookDetail({ book }: { book: Book }) {
           )}
         </div>
       </section>
+      {!!book.preview_pages && <PreviewDialog bookId={book.id} open={previewOpen} onClose={() => setPreviewOpen(false)} />}
     </div>
   );
 }

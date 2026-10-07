@@ -15,10 +15,11 @@ export async function POST(request: Request) {
     const { bookId } = z.object({ bookId: z.uuid() }).parse(await jsonBody(request));
     const db = serviceClient();
     const { data: book, error: lookup } = await db.from("books")
-      .select("id,slug,title_en,is_demo,published")
+      .select("id,slug,title_en,is_demo,published,archived_at")
       .eq("id", bookId).maybeSingle();
     if (lookup) throw lookup;
     if (!book) throw new AppError(404, "Save the sample book before adding its test PDF.");
+    if (book.archived_at) throw new AppError(409, "Restore this archived book before changing its test file.");
     if (!book.is_demo) throw new AppError(400, "Save this book as a sample before adding a test PDF.");
     if (book.published) throw new AppError(409, "Unpublish this book before changing its test file.");
     const { data: existing, error: fileLookup } = await db.from("book_formats")

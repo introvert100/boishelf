@@ -63,6 +63,18 @@ test("unconfigured authentication and admin routes stay closed", async ({
       })
     ).status(),
   ).toBe(401);
+  const id = "00000000-0000-4000-8000-000000000001";
+  expect((await request.delete(`/api/admin/books/${id}`, {
+    headers: { Origin: "http://localhost:3000" },
+  })).status()).toBe(401);
+  expect((await request.post(`/api/admin/books/${id}/preview`, {
+    headers: { Origin: "http://localhost:3000" }, data: { pages: 1 },
+  })).status()).toBe(401);
+  expect((await request.post(`/api/admin/books/${id}/restore`, {
+    headers: { Origin: "http://localhost:3000" }, data: {},
+  })).status()).toBe(401);
+  expect((await request.get(`/api/admin/books/${id}/preview-view`)).status()).toBe(401);
+  expect((await request.get(`/api/previews/${id}`)).status()).toBe(503);
   expect(
     (
       await request.post(

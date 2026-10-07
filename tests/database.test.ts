@@ -8,8 +8,9 @@ const reader = "11111111-1111-4111-8111-111111111111",
 test("PostgreSQL migration, access policies and atomic payment transitions", async (t) => {
   const db = new PGlite();
   await db.exec(
-    `create role anon; create role authenticated; create role service_role bypassrls; create role supabase_auth_admin; create schema auth; create schema storage; grant usage on schema public,auth to anon,authenticated,service_role,supabase_auth_admin; create table auth.users(id uuid primary key,email text); create function auth.uid() returns uuid language sql stable as $$ select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid $$; create table storage.buckets(id text primary key,name text,public boolean,file_size_limit bigint,allowed_mime_types text[]);`,
+    `create role anon; create role authenticated; create role service_role bypassrls; create role supabase_auth_admin; create schema auth; create schema storage; grant usage on schema public,auth,storage to anon,authenticated,service_role,supabase_auth_admin; create table auth.users(id uuid primary key,email text); create function auth.uid() returns uuid language sql stable as $$ select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid $$; create table storage.buckets(id text primary key,name text,public boolean,file_size_limit bigint,allowed_mime_types text[]); create table storage.objects(bucket_id text,name text);`,
   );
+  await db.exec("grant select on storage.objects to service_role;");
   for (const path of readdirSync("supabase/migrations")
     .filter((x) => x.endsWith(".sql"))
     .sort())
@@ -51,14 +52,14 @@ test("PostgreSQL migration, access policies and atomic payment transitions", asy
     amount_paisa: number;
     reused: boolean;
   };
-  await t.test("all eight public tables have RLS", async () => {
+  await t.test("all ten public tables have RLS", async () => {
     const { rows } = await db.query<{
       relname: string;
       relrowsecurity: boolean;
     }>(
       "select relname,relrowsecurity from pg_class join pg_namespace on pg_namespace.oid=relnamespace where nspname='public' and relkind='r'",
     );
-    assert.equal(rows.length, 8);
+    assert.equal(rows.length, 10);
     assert.ok(rows.every((r) => r.relrowsecurity));
   });
   await t.test(
@@ -350,6 +351,98 @@ test("PostgreSQL migration, access policies and atomic payment transitions", asy
     );
     assert.equal(rows.length, 2);
     assert.ok(rows.every((row) => !row.public));
+  });
+  await t.test("preview paths and cleanup jobs are service-only", async () => {
+    await db.query(`insert into book_previews(book_id,source_kind,source_path,source_page_count,preview_path,preview_pages)
+      values($1,'book_pdf','private/sample.pdf',3,'private/excerpt.pdf',2)`, [book]);
+    for (const role of ["anon", "authenticated"]) {
+      await assert.rejects(asRole(role, role === "anon" ? null : reader,
+        () => db.query("select * from book_previews")));
+      await assert.rejects(asRole(role, role === "anon" ? null : reader,
+        () => db.query("select * from storage_cleanup_jobs")));
+      await assert.rejects(asRole(role, role === "anon" ? null : reader,
+        () => db.query("select delete_unsold_book($1)", [book])));
+    }
+    const result = await db.query<{ preview_pages: number }>(
+      "select preview_pages from book_previews where book_id=$1", [book]);
+    assert.equal(result.rows[0].preview_pages, 2);
+  });
+  await t.test("service role can place orders through the sellability trigger", async () => {
+    const id = "55555555-5555-4555-8555-555555555555";
+    await db.query(`insert into books(id,slug,title_bn,title_en,author_bn,author_en,description_bn,description_en,category,price_paisa,pages,published)
+      values($1,'sellable-test','বই','Sellable test','লেখক','Author','বিবরণ','Description','fiction',1000,2,true)`, [id]);
+    await db.query("insert into book_formats(book_id,format,storage_path,original_name,size_bytes) values($1,'pdf','private/sellable.pdf','sellable.pdf',100)", [id]);
+    const placed = await asRole("service_role", null,
+      () => db.query("select create_order($1,$2,'sandbox')", [reader, id]));
+    assert.equal(placed.rows.length, 1);
+    await db.query("update books set archived_at=now(),published=false where id=$1", [id]);
+    await assert.rejects(asRole("service_role", null,
+      () => db.query("select create_order($1,$2,'sandbox')", [other, id])), /book_unavailable/);
+  });
+  await t.test("PDF replacement updates paid file and excerpt together", async () => {
+    await db.query("select replace_pdf_with_preview($1,$2,$3,$4,$5,$6,$7,$8)",
+      [book, "private/new.pdf", "new.pdf", 200, "private/new-excerpt.pdf", 2, 4, "private/excerpt.pdf"]);
+    const { rows } = await db.query<{ storage_path: string; preview_path: string; source_path: string }>(
+      "select f.storage_path,p.preview_path,p.source_path from book_formats f join book_previews p on p.book_id=f.book_id where f.book_id=$1 and f.format='pdf'", [book]);
+    assert.equal(rows[0].storage_path, "private/new.pdf");
+    assert.equal(rows[0].preview_path, "private/new-excerpt.pdf");
+    assert.equal(rows[0].source_path, "private/new.pdf");
+    await assert.rejects(() => db.query("select replace_pdf_with_preview($1,$2,$3,$4,$5,$6,$7,$8)",
+      [book, "private/bad.pdf", "bad.pdf", 100, "private/bad-excerpt.pdf", 4, 4, "private/new-excerpt.pdf"]));
+    const unchanged = await db.query<{ storage_path: string }>(
+      "select storage_path from book_formats where book_id=$1 and format='pdf'", [book]);
+    assert.equal(unchanged.rows[0].storage_path, "private/new.pdf");
+  });
+  await t.test("stale preview saves fail without replacing the active excerpt", async () => {
+    await db.query("select save_book_preview($1,$2,$3,$4,$5,$6,$7,$8)",
+      [book, "private/new-excerpt.pdf", "private/new.pdf", "book_pdf",
+        "private/new.pdf", 4, "private/latest-excerpt.pdf", 1]);
+    await assert.rejects(() => db.query("select save_book_preview($1,$2,$3,$4,$5,$6,$7,$8)",
+      [book, "private/new-excerpt.pdf", "private/new.pdf", "book_pdf",
+        "private/new.pdf", 4, "private/stale-excerpt.pdf", 2]), /preview_changed/);
+    const current = await db.query<{ preview_path: string; preview_pages: number }>(
+      "select preview_path,preview_pages from book_previews where book_id=$1", [book]);
+    assert.equal(current.rows[0].preview_path, "private/latest-excerpt.pdf");
+    assert.equal(current.rows[0].preview_pages, 1);
+    await assert.rejects(() => db.query("select replace_pdf_without_preview($1,$2,$3,$4,$5)",
+      [book, "private/stale-paid.pdf", "stale-paid.pdf", 100, null]), /preview_changed/);
+    const paid = await db.query<{ storage_path: string }>(
+      "select storage_path from book_formats where book_id=$1 and format='pdf'", [book]);
+    assert.equal(paid.rows[0].storage_path, "private/new.pdf");
+  });
+  await t.test("ordered books archive without losing a buyer's entitlement", async () => {
+    await assert.rejects(() => db.query("select delete_unsold_book($1)", [book]), /book_has_orders/);
+    await db.query("update books set archived_at=now(),published=false where id=$1", [book]);
+    assert.equal((await asRole("anon", null,
+      () => db.query("select id from books where id=$1", [book]))).rows.length, 0);
+    const access = await asRole("authenticated", reader,
+      () => db.query("select book_id from entitlements where book_id=$1", [book]));
+    assert.equal(access.rows.length, 1);
+    await db.query("update books set archived_at=null where id=$1", [book]);
+    const restored = await db.query<{ published: boolean }>("select published from books where id=$1", [book]);
+    assert.equal(restored.rows[0].published, false);
+  });
+  await t.test("unsold deletion is atomic, repeat-safe, and queues all current files", async () => {
+    const id = "44444444-4444-4444-8444-444444444444";
+    await db.query(`insert into books(id,slug,title_bn,title_en,author_bn,author_en,description_bn,description_en,category,price_paisa,pages,cover_path)
+      values($1,'delete-me','বই','Delete me','লেখক','Author','বিবরণ','Description','fiction',1000,3,'private/cover.png')`, [id]);
+    await db.query("insert into book_formats(book_id,format,storage_path,original_name,size_bytes) values($1,'epub','private/ebook.epub','book.epub',100)", [id]);
+    await db.query(`insert into book_previews(book_id,source_kind,source_path,source_page_count,preview_path,preview_pages)
+      values($1,'sample_pdf','private/sample-source.pdf',2,'private/sample-excerpt.pdf',1)`, [id]);
+    await db.query("insert into storage.objects(bucket_id,name) values('ebooks',$1)", [`${id}/old-replaced.pdf`]);
+    const privilegedDelete = await asRole("service_role", null,
+      () => db.query("select delete_unsold_book($1)", [id]));
+    assert.equal(privilegedDelete.rows.length, 1);
+    assert.equal((await db.query("select id from books where id=$1", [id])).rows.length, 1);
+    await db.query("select delete_unsold_book($1)", [id]);
+    assert.equal((await db.query("select id from books where id=$1", [id])).rows.length, 0);
+    assert.equal((await db.query("select book_id from book_formats where book_id=$1", [id])).rows.length, 0);
+    assert.equal((await db.query("select book_id from book_previews where book_id=$1", [id])).rows.length, 0);
+    const jobs = await db.query<{ bucket: string; object_path: string }>(
+      "select bucket,object_path from storage_cleanup_jobs where book_id=$1", [id]);
+    assert.deepEqual(jobs.rows.map((row) => row.object_path).sort(),
+      ["private/cover.png", "private/ebook.epub", "private/sample-excerpt.pdf", "private/sample-source.pdf", `${id}/old-replaced.pdf`].sort());
+    await assert.rejects(() => db.query("select delete_unsold_book($1)", [id]), /book_not_found/);
   });
   await db.close();
 });

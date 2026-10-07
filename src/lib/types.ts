@@ -22,6 +22,10 @@ export type Book = {
   published: boolean;
   is_demo: boolean;
   featured: boolean;
+  archived_at?: string | null;
+  preview_pages?: number;
+  preview_source_pages?: number;
+  preview_source_kind?: "book_pdf" | "sample_pdf";
   created_at?: string;
 };
 export type Viewer = { email: string; name: string; admin: boolean } | null;
