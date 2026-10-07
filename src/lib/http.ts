@@ -29,7 +29,7 @@ export function logEvent(
 export function apiError(error: unknown, event = "server_error") {
   const id = crypto.randomUUID();
   if (error instanceof AppError) {
-    if (error.status >= 500 || event === "payment_callback_failed" || event === "admin_book_save_failed")
+    if (error.status >= 500 || ["payment_callback_failed", "admin_book_save_failed", "preview_save_failed", "admin_source_view_failed"].includes(event))
       logEvent(event, { requestId: id, status: error.status, ...(event === "admin_book_save_failed" ? { fields: Object.keys(error.fields || {}).join(",") } : {}) });
     return NextResponse.json(
       { error: error.message, fields: error.fields, requestId: id },

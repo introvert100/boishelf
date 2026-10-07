@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
 const config: NextConfig = {
   poweredByHeader: false,
-  serverExternalPackages: [],
+  serverExternalPackages: ["@neslinesli93/qpdf-wasm"],
   async headers() {
     return [
       {

@@ -39,7 +39,7 @@ export function SourceViewer({ bookId, kind, open, onClose, onSavePages, onInspe
         const response = await fetch(endpoint, { signal: controller.signal, cache: "no-store" });
         if (!response.ok) {
           const body = await response.json();
-          throw new Error(body.error || "The book file could not be opened.");
+          throw new Error(`${body.error || "The book file could not be opened."}${body.requestId ? ` (request ${body.requestId})` : ""}`);
         }
         if (kind === "epub") {
           const book = inspectEpub(new Uint8Array(await response.arrayBuffer()));
@@ -53,7 +53,15 @@ export function SourceViewer({ bookId, kind, open, onClose, onSavePages, onInspe
           }
         }
       } catch (failure) {
-        if (!controller.signal.aborted) setError((failure as Error).message || "The book file could not be opened.");
+        if (!controller.signal.aborted) {
+          const raw = (failure as Error).message || "The book file could not be opened.";
+          const request = / \(request [0-9a-f-]{36}\)$/.exec(raw)?.[0] || "";
+          const message = raw.slice(0, raw.length - request.length);
+          const translated = message === "This PDF could not be safely inspected. Export a fresh PDF and try again."
+            ? t("এই PDF নিরাপদে পরীক্ষা করা যায়নি। নতুন করে PDF রপ্তানি করে আবার চেষ্টা করুন।", message)
+            : message;
+          setError(`${translated}${request}`);
+        }
       } finally { if (!controller.signal.aborted) setLoading(false); }
     };
     void load();

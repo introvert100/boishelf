@@ -66,6 +66,7 @@ const bnErrors: Record<string, string> = {
   "Unpublish this book before changing its test file.": "পরীক্ষার ফাইল বদলানোর আগে বইটি অপ্রকাশিত করুন।",
   "Choose a sample PDF.": "একটি নমুনা PDF বেছে নিন।",
   "This PDF is corrupt, encrypted, or unsupported. Upload an unprotected sample PDF instead.": "PDF-টি নষ্ট, পাসওয়ার্ড-সুরক্ষিত বা সমর্থিত নয়। পাসওয়ার্ড ছাড়া একটি নমুনা PDF আপলোড করুন।",
+  "This PDF could not be safely inspected. Export a fresh PDF and try again.": "এই PDF নিরাপদে পরীক্ষা করা যায়নি। নতুন করে PDF রপ্তানি করে আবার চেষ্টা করুন।",
   "This PDF has only one page. A free preview would reveal the whole book. Upload a multi-page PDF.": "এই PDF-এ একটি পৃষ্ঠা। প্রিভিউ দিলে পুরো বই প্রকাশ হয়ে যাবে। একাধিক পৃষ্ঠার PDF আপলোড করুন।",
   "Upload a PDF ebook or a separate sample PDF before enabling previews.": "প্রিভিউ চালু করার আগে ইবুক PDF অথবা আলাদা নমুনা PDF আপলোড করুন।",
   "The PDF page count is not supported.": "এই PDF-এর পৃষ্ঠা সংখ্যা সমর্থিত নয়।",
