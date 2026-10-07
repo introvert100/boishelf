@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import { pdfFrameSources } from "./src/lib/pdf-frame-sources";
 const config: NextConfig = {
   poweredByHeader: false,
   serverExternalPackages: ["@neslinesli93/qpdf-wasm"],
@@ -19,7 +20,7 @@ const config: NextConfig = {
             value:
               "default-src 'self'; script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com" +
               (process.env.NODE_ENV === "development" ? " 'unsafe-eval'" : "") +
-              "; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://*.supabase.co; font-src 'self'; connect-src 'self' https://*.supabase.co https://challenges.cloudflare.com; frame-src https://challenges.cloudflare.com; frame-ancestors 'none'; base-uri 'self'; object-src 'none'; form-action 'self' https://*.sslcommerz.com",
+              `; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://*.supabase.co; font-src 'self'; connect-src 'self' https://*.supabase.co https://challenges.cloudflare.com; frame-src ${pdfFrameSources(process.env.NEXT_PUBLIC_SUPABASE_URL)}; frame-ancestors 'none'; base-uri 'self'; object-src 'none'; form-action 'self' https://*.sslcommerz.com`,
           },
           {
             key: "Strict-Transport-Security",

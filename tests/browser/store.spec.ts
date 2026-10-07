@@ -115,6 +115,10 @@ test("policies, 404 and mobile layout are clear", async ({ page }) => {
 test("CSRF and readiness endpoints deny unauthorised callers", async ({
   request,
 }) => {
+  const home = await request.get("/");
+  const policy = home.headers()["content-security-policy"] || "";
+  expect(policy).toContain("frame-src https://challenges.cloudflare.com");
+  expect(policy).toContain("frame-ancestors 'none'");
   expect(
     (
       await request.post("/api/checkout", {

@@ -14,6 +14,7 @@ import {
 } from "../src/lib/payment-rules";
 import { detectUpload } from "../src/lib/admin-validation";
 import { signedResumableEndpoint, signedUploadHeaders } from "../src/lib/signed-upload";
+import { pdfFrameSources } from "../src/lib/pdf-frame-sources";
 import type { User } from "@supabase/supabase-js";
 const user = {
   id: "reader",
@@ -41,6 +42,13 @@ test("signed ebook uploads use Supabase's signed TUS route and public API key", 
     apikey: "public-key",
     "x-signature": "signed-token",
   });
+});
+test("PDF frames allow only the configured Supabase project and Turnstile", () => {
+  assert.equal(pdfFrameSources(), "https://challenges.cloudflare.com");
+  assert.equal(pdfFrameSources("https://example.supabase.co"),
+    "https://challenges.cloudflare.com https://example.supabase.co https://example.storage.supabase.co");
+  assert.equal(pdfFrameSources("http://127.0.0.1:54321"),
+    "https://challenges.cloudflare.com http://127.0.0.1:54321");
 });
 test("only confirmed Gmail addresses are accepted", () => {
   assert.equal(isGmailUser(user), true);
