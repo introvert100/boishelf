@@ -22,7 +22,7 @@ Refunds are not automated in this release. Complete any eligible refund through 
 
 ## Files and backups
 
-Supabase holds all records and files; Render restarts and deploys do not remove them. New uploads use unique object paths. Replacing a format keeps the previous paid object for rollback. Preview excerpts live in the private `ebooks` bucket; only the excerpt receives a five-minute signed public link. Visitors may save that excerpt. A failed excerpt replacement leaves the prior preview active.
+Supabase holds all records and files; Render restarts and deploys do not remove them. New uploads use unique object paths. Replacing a format keeps the previous paid object for rollback. Preview excerpts live in the private `ebooks` bucket; only the excerpt receives a five-minute signed public link. Visitors may save that excerpt. The admin source viewer checks owner access on the server; a five-minute signed URL opens a paid PDF, while an EPUB is read through an owner-only endpoint. A failed excerpt replacement leaves the prior preview active.
 
 Deleting an unsold book removes its database records in one transaction and adds its private objects, including older objects under its book ID folder, to `storage_cleanup_jobs`. Storage deletion then uses the Storage API. If a cleanup call fails, the admin page shows **Retry cleanup**; never delete `storage.objects` rows directly. A book with any order is archived instead. Archived books cannot be purchased or publicly previewed, while existing entitlements and downloads remain valid.
 

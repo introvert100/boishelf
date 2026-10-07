@@ -9,6 +9,7 @@ import { blankBook, bookValues, draftKey, type BookFormValues } from "@/lib/book
 import type { Book } from "@/lib/types";
 import { useLanguage } from "./store";
 import { PreviewDialog } from "./preview-dialog";
+import { SourceViewer } from "./source-viewer";
 
 const uploadKinds: UploadKind[] = ["cover", "pdf", "epub"];
 type UploadState = { progress: number; filename: string; phase: "uploading" | "processing" | "done" | "error"; error?: string; replaced?: boolean };
@@ -59,6 +60,7 @@ const bnErrors: Record<string, string> = {
   "Unpublish this book before changing its test file.": "পরীক্ষার ফাইল বদলানোর আগে বইটি অপ্রকাশিত করুন।",
   "Choose a sample PDF.": "একটি নমুনা PDF বেছে নিন।",
   "This PDF is corrupt, encrypted, or unsupported. Upload an unprotected sample PDF instead.": "PDF-টি নষ্ট, পাসওয়ার্ড-সুরক্ষিত বা সমর্থিত নয়। পাসওয়ার্ড ছাড়া একটি নমুনা PDF আপলোড করুন।",
+  "This PDF has only one page. A free preview would reveal the whole book. Upload a multi-page PDF.": "এই PDF-এ একটি পৃষ্ঠা। প্রিভিউ দিলে পুরো বই প্রকাশ হয়ে যাবে। একাধিক পৃষ্ঠার PDF আপলোড করুন।",
   "Upload a PDF ebook or a separate sample PDF before enabling previews.": "প্রিভিউ চালু করার আগে ইবুক PDF অথবা আলাদা নমুনা PDF আপলোড করুন।",
   "The PDF page count is not supported.": "এই PDF-এর পৃষ্ঠা সংখ্যা সমর্থিত নয়।",
   "The preview is too large. Choose fewer pages or upload a smaller sample PDF.": "প্রিভিউ ফাইলটি বড়। কম পৃষ্ঠা নিন অথবা ছোট নমুনা PDF আপলোড করুন।",
@@ -114,8 +116,10 @@ export function BookEditor({
   const busyRef = useRef(false);
   const [uploads, setUploads] = useState<Partial<Record<UploadKind, UploadState>>>({});
   const [previewCount, setPreviewCount] = useState(String(book?.preview_pages || 0));
+  const [inspectedPages, setInspectedPages] = useState<number | null>(book?.preview_source_pages || null);
   const [previewError, setPreviewError] = useState("");
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [sourceOpen, setSourceOpen] = useState<"pdf" | "epub" | "sample" | null>(null);
   const hasEbook = !!book?.formats.some((format) => format === "PDF" || format === "EPUB") || uploads.pdf?.phase === "done" || uploads.epub?.phase === "done";
   const hasCover = !!book?.cover_path || uploads.cover?.phase === "done";
   const missingPublicationFile = !hasEbook
@@ -222,9 +226,12 @@ export function BookEditor({
       });
       setUploads((current) => ({ ...current, [kind]: { phase: "done", progress: 100, filename: result.name, replaced: existing } }));
       onUploaded(book.id, kind, result.name, result.path);
-      if (kind === "pdf" && result.previewPages !== undefined)
+      if (kind === "pdf" && result.previewPages !== undefined) {
+        setPreviewCount(String(result.previewPages));
+        setInspectedPages(result.sourcePages || null);
         onPreviewSaved(book.id, result.previewPages, result.sourcePages || 0,
           result.previewPages > 0 ? "book_pdf" : null);
+      }
       onSuccess(t(`${kind.toUpperCase()} ফাইল সংরক্ষিত হয়েছে।`, `${kind.toUpperCase()} uploaded successfully.`));
       router.refresh();
     } catch (error) {
@@ -251,14 +258,18 @@ export function BookEditor({
     } finally { busyRef.current = false; setBusy(false); }
   }
 
-  async function savePreview() {
-    if (!book?.id || busyRef.current) return;
-    if (!/^\d+$/.test(previewCount.trim())) {
-      setPreviewError(t("০ বা তার বেশি পূর্ণসংখ্যা লিখুন।", "Enter zero or a whole number of pages."));
-      return;
+  async function savePreview(selectedPages?: number): Promise<string | null> {
+    if (!book?.id || busyRef.current) return t("আগের কাজটি শেষ হওয়া পর্যন্ত অপেক্ষা করুন।", "Wait for the current action to finish.");
+    const raw = selectedPages === undefined ? previewCount.trim() : String(selectedPages);
+    if (!/^\d+$/.test(raw)) {
+      const message = t("০ বা তার বেশি পূর্ণসংখ্যা লিখুন।", "Enter zero or a whole number of pages.");
+      setPreviewError(message); return message;
     }
-    const pages = Number(previewCount);
-    if (pages > 20000) { setPreviewError(t("পৃষ্ঠা সংখ্যা ২০,০০০-এর বেশি হতে পারে না।", "Preview page count cannot exceed 20,000.")); return; }
+    const pages = Number(raw);
+    if (pages > 20000) {
+      const message = t("পৃষ্ঠা সংখ্যা ২০,০০০-এর বেশি হতে পারে না।", "Preview page count cannot exceed 20,000.");
+      setPreviewError(message); return message;
+    }
     busyRef.current = true; setBusy(true); setPreviewError("");
     try {
       const response = await fetch(`/api/admin/books/${book.id}/preview`, {
@@ -266,10 +277,16 @@ export function BookEditor({
       });
       const result = await response.json();
       if (!response.ok) throw new Error(`${result.error || "Preview could not be saved."}${result.requestId ? ` (request ${result.requestId})` : ""}`);
+      setPreviewCount(String(pages));
+      setInspectedPages(result.sourcePages || null);
       onPreviewSaved(book.id, result.previewPages, result.sourcePages || 0, result.sourceKind || null);
       onSuccess(pages === 0 ? t("প্রিভিউ বন্ধ হয়েছে।", "Preview disabled.") : t("প্রিভিউ তৈরি ও সংরক্ষিত হয়েছে।", "Preview generated and saved."));
       router.refresh();
-    } catch (error) { setPreviewError(localize((error as Error).message)); }
+      return null;
+    } catch (error) {
+      const message = localize((error as Error).message);
+      setPreviewError(message); return message;
+    }
     finally { busyRef.current = false; setBusy(false); }
   }
 
@@ -286,6 +303,8 @@ export function BookEditor({
       const result = await response.json();
       if (!response.ok) throw new Error(`${result.error || "Sample PDF could not be saved."}${result.requestId ? ` (request ${result.requestId})` : ""}`);
       onPreviewSaved(book.id, result.previewPages, result.sourcePages, "sample_pdf");
+      setPreviewCount(String(result.previewPages));
+      setInspectedPages(result.sourcePages);
       onSuccess(t("নমুনা PDF সংরক্ষিত হয়েছে।", "Sample PDF uploaded and preview saved."));
       router.refresh();
     } catch (error) { setPreviewError(localize((error as Error).message)); }
@@ -375,26 +394,32 @@ export function BookEditor({
             {state?.phase === "error" ? `${state.filename}: ${localize(state.error || "Upload failed. Please retry.")}` : state?.phase === "uploading" ? `${t("আপলোড হচ্ছে", "Uploading")} ${state.progress}% — ${state.filename}` : state?.phase === "processing" ? `${t("সংরক্ষণ হচ্ছে", "Finishing")} — ${state.filename}` : state?.phase === "done" ? `${state.filename} — ${state.replaced ? t("আগের ফাইল বদলানো হয়েছে", "previous file replaced") : t("আপলোড হয়েছে", "uploaded")}` : existing ? `${existingName || t("ফাইল আপলোড করা আছে", "File uploaded")} · ${t("বদলাতে নতুন ফাইল বেছে নিন", "Choose a new file to replace it")}` : t("কোনো ফাইল আপলোড করা হয়নি", "No file uploaded yet")}
           </p>
           {state?.phase === "uploading" && <progress value={state.progress} max="100" aria-label={`${kind.toUpperCase()} upload progress`} />}
+          {kind !== "cover" && (existing || state?.phase === "done") && <button type="button" className="button secondary" disabled={busy}
+            onClick={() => setSourceOpen(kind)}>{kind === "pdf" ? t("PDF দেখে প্রিভিউ বাছুন", "Inspect PDF and choose preview") : t("EPUB-এর অধ্যায় দেখুন", "Read EPUB chapters")}</button>}
         </div>;
       })}</div>
       <div className="preview-admin">
         <h3>{t("বিনামূল্যে পড়ার প্রিভিউ", "Free reading preview")}</h3>
-        <p>{t("কত পৃষ্ঠা বিনামূল্যে দেখা যাবে তা ঠিক করুন। ০ লিখলে প্রিভিউ বন্ধ থাকবে। আসল PDF-এর অন্তত শেষ পৃষ্ঠাটি কেবল ক্রেতাদের জন্য থাকবে।", "Choose how many pages visitors can read. Enter 0 to disable. At least the last page of the paid PDF stays private.")}</p>
+        <p>{book.formats.includes("PDF")
+          ? t("উপরের PDF দেখে শেষ বিনামূল্যের পৃষ্ঠা বেছে নিন। অথবা নিচে সংখ্যা লিখুন; ০ দিলে প্রিভিউ বন্ধ। আসল PDF-এর শেষ পৃষ্ঠা ক্রেতাদের জন্য থাকবে।", "Inspect the PDF above and choose the last free page, or enter a number below. Use 0 to disable. The paid PDF’s last page stays private.")
+          : t("EPUB-এর জন্য আলাদা নমুনা PDF আপলোড করুন। সেটি দেখে বিনামূল্যের শেষ পৃষ্ঠা বেছে নিন। ০ দিলে প্রিভিউ বন্ধ।", "For an EPUB, upload a separate sample PDF. Inspect it to choose the last free page. Use 0 to disable.")}</p>
         <label htmlFor="preview-pages">{t("প্রিভিউ পৃষ্ঠা সংখ্যা", "Preview pages")}
           <input id="preview-pages" inputMode="numeric" value={previewCount} onChange={(event) => { setPreviewCount(event.target.value); setPreviewError(""); }} aria-invalid={!!previewError} aria-describedby={previewError ? "preview-error" : "preview-help"} />
         </label>
-        <p id="preview-help" className="field-help">{t("বর্তমানে সংরক্ষিত:", "Currently saved:")} {book.preview_pages || 0} · {book.preview_source_pages ? `${book.preview_source_pages} ${t("পৃষ্ঠা উৎস PDF-এ", "pages in source PDF")}` : t("এখনো উৎস PDF যাচাই হয়নি", "source PDF not inspected yet")}</p>
+        <p id="preview-help" className="field-help">{t("বর্তমানে সংরক্ষিত:", "Currently saved:")} {book.preview_pages || 0} · {inspectedPages ? `${inspectedPages} ${t("পৃষ্ঠা উৎস PDF-এ", "pages in source PDF")}` : t("পৃষ্ঠা সংখ্যা দেখতে উপরের PDF খুলুন", "open the PDF above to see its page count")}</p>
         {previewError && <p id="preview-error" className="field-error" role="alert">{previewError}</p>}
         {book.formats.includes("PDF") ? <button type="button" className="button secondary" disabled={busy} onClick={() => void savePreview()}>{t("প্রিভিউ সংরক্ষণ করুন", "Save preview")}</button> : book.formats.includes("EPUB") ? <>
-          <p className="field-help">{t("শুধু EPUB থাকলে আলাদা নমুনা PDF আপলোড করুন। সেই ফাইলের প্রথম নির্বাচিত পৃষ্ঠাগুলো দেখানো হবে।", "For an EPUB-only book, upload a separate sample PDF. Visitors see its first selected pages.")}</p>
+          <p className="field-help">{t("EPUB-এর অধ্যায় দেখতে উপরের বোতাম চাপুন। বিনামূল্যের প্রিভিউ দিতে আলাদা নমুনা PDF আপলোড করুন। আগে ০ রেখে PDF আপলোড করে দেখে নিতে পারেন, তারপর পৃষ্ঠা বেছে সংরক্ষণ করুন।", "Use the button above to read EPUB chapters. For a public preview, upload a separate sample PDF. You can upload it with 0 pages first, inspect it, then choose and save the free pages.")}</p>
           <label htmlFor="preview-source">{t("নমুনা PDF · সর্বোচ্চ ৩০ MB", "Sample PDF · up to 30 MB")}
             <input id="preview-source" type="file" accept=".pdf,application/pdf" disabled={busy} onChange={(event) => { void uploadPreviewSource(event.target.files?.[0]); event.target.value = ""; }} />
           </label>
           {book.preview_source_kind === "sample_pdf" && <button type="button" className="button secondary" disabled={busy} onClick={() => void savePreview()}>{t("পৃষ্ঠা সংখ্যা পরিবর্তন করুন", "Update page count")}</button>}
+          {book.preview_source_kind === "sample_pdf" && <button type="button" className="button secondary" disabled={busy} onClick={() => setSourceOpen("sample")}>{t("নমুনা PDF দেখে পৃষ্ঠা বাছুন", "Inspect sample PDF and choose pages")}</button>}
         </> : <p className="field-help">{t("প্রথমে PDF অথবা EPUB আপলোড করুন।", "Upload a PDF or EPUB first.")}</p>}
         {!!book.preview_pages && <button type="button" className="button secondary" onClick={() => setPreviewOpen(true)}>{t("দর্শকের মতো প্রিভিউ দেখুন", "View preview as visitor")}</button>}
       </div>
       <PreviewDialog bookId={book.id} admin open={previewOpen} onClose={() => setPreviewOpen(false)} />
+      {sourceOpen && <SourceViewer bookId={book.id} kind={sourceOpen} open onClose={() => setSourceOpen(null)} onSavePages={savePreview} onInspected={setInspectedPages} />}
     </section> : <p className="field-help file-step">{t("প্রথমে তথ্য সংরক্ষণ করুন। তারপর এখানে প্রচ্ছদ, PDF ও EPUB আপলোডের ঘর দেখা যাবে।", "Save the book information first. The cover, PDF, and EPUB upload controls will appear here.")}</p>}
   </div>;
 }

@@ -27,7 +27,9 @@ export async function makePreviewPdf(bytes: Uint8Array, pages: number, keepOnePr
   if (total < 1 || total > 20000)
     throw new PreviewPdfError("The PDF page count is not supported.");
   if (pages > total || (keepOnePrivate && pages >= total))
-    throw new PreviewPdfError(keepOnePrivate
+    throw new PreviewPdfError(keepOnePrivate && total === 1
+      ? "This PDF has only one page. A free preview would reveal the whole book. Upload a multi-page PDF."
+      : keepOnePrivate
       ? `Choose at most ${Math.max(0, total - 1)} preview pages so at least one page stays private.`
       : `This sample PDF has only ${total} pages.`);
   const excerpt = await PDFDocument.create();

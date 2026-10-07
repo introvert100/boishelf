@@ -22,7 +22,7 @@ test("preview copies only the selected first pages into a separate PDF", async (
 
 test("paid PDFs always keep at least one page private", async () => {
   const one = await fixture([301]);
-  await assert.rejects(makePreviewPdf(one, 1, true), PreviewPdfError);
+  await assert.rejects(makePreviewPdf(one, 1, true), /only one page.*reveal the whole book/);
   const three = await fixture([301, 302, 303]);
   await assert.rejects(makePreviewPdf(three, 0, true), PreviewPdfError);
   await assert.rejects(makePreviewPdf(three, 3, true), PreviewPdfError);

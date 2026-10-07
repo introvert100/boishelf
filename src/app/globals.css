@@ -1570,6 +1570,16 @@ td a {
 .preview-heading h2 { margin: 0; }
 .preview-heading p { margin: 5px 0 13px; }
 .preview-frame { display: block; width: 100%; height: min(68dvh, 700px); border: 1px solid var(--line); margin: 8px 0 14px; }
+.source-dialog { overflow: auto; }
+.source-count { padding: 10px 13px; background: var(--pale); border-radius: 8px; }
+.source-controls { display: flex; align-items: end; flex-wrap: wrap; gap: 14px; margin: 14px 0; }
+.source-controls label { display: grid; gap: 5px; min-width: 130px; }
+.source-controls input[type="number"] { width: 110px; }
+.source-controls input[type="range"] { flex: 1; min-width: 130px; margin-bottom: 10px; }
+.source-controls select { max-width: min(75vw, 440px); }
+.source-dialog .form-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+.epub-chapter { max-height: min(55dvh, 560px); overflow: auto; padding: 16px; border: 1px solid var(--line); border-radius: 8px; line-height: 1.7; white-space: pre-wrap; }
+.epub-chapter h3 { margin-top: 0; }
 .confirm-dialog {
   width: min(92vw, 520px); max-height: 85dvh; overflow: auto;
   border: 1px solid var(--line); border-radius: 18px; padding: 28px;
