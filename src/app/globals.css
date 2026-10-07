@@ -1580,6 +1580,23 @@ td a {
 .source-dialog .form-actions { display: flex; flex-wrap: wrap; gap: 10px; }
 .epub-chapter { max-height: min(55dvh, 560px); overflow: auto; padding: 16px; border: 1px solid var(--line); border-radius: 8px; line-height: 1.7; white-space: pre-wrap; }
 .epub-chapter h3 { margin-top: 0; }
+.cover-crop-dialog { width: min(850px, calc(100vw - 24px)); max-height: calc(100dvh - 24px); overflow: auto;
+  border: 1px solid var(--line); border-radius: 14px; padding: 18px; background: var(--paper); color: var(--ink); }
+.cover-crop-dialog::backdrop { background: #10251acc; }
+.cover-crop-layout { display: grid; grid-template-columns: minmax(0, 400px) minmax(180px, 1fr); align-items: start; gap: 22px; margin: 14px 0; }
+.cover-crop-canvas { display: block; width: 100%; max-width: 400px; height: auto; border: 2px solid var(--ink);
+  border-radius: 8px; cursor: grab; touch-action: none; }
+.cover-crop-canvas:active { cursor: grabbing; }
+.cover-crop-controls { display: grid; gap: 11px; }
+.cover-crop-controls canvas { width: 160px; height: 226px; max-width: 100%; border: 1px solid var(--line); }
+.cover-crop-controls label { display: grid; gap: 5px; }
+.cover-crop-controls label span { font-size: .85em; color: var(--muted); }
+.cover-crop-controls input[type="range"] { width: 100%; }
+.cover-crop-dialog .form-actions { display: flex; justify-content: flex-end; }
+.admin-cover-preview { display: flex; align-items: center; gap: 12px; margin-top: 12px; }
+.admin-cover-preview img { width: 80px; height: 113px; object-fit: cover; border: 1px solid var(--line); border-radius: 4px; }
+@media (max-width: 620px) { .cover-crop-layout { grid-template-columns: 1fr; } .cover-crop-controls { grid-template-columns: 1fr 1fr; }
+  .cover-crop-controls canvas { width: 90px; height: auto; } }
 .confirm-dialog {
   width: min(92vw, 520px); max-height: 85dvh; overflow: auto;
   border: 1px solid var(--line); border-radius: 18px; padding: 28px;

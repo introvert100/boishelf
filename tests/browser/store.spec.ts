@@ -76,6 +76,12 @@ test("unconfigured authentication and admin routes stay closed", async ({
   expect((await request.get(`/api/admin/books/${id}/preview-view`)).status()).toBe(401);
   expect((await request.get(`/api/admin/books/${id}/source-view?kind=pdf`)).status()).toBe(401);
   expect((await request.get(`/api/admin/books/${id}/source-view?kind=epub`)).status()).toBe(401);
+  expect((await request.post(`/api/admin/upload/start`, {
+    headers: { Origin: "http://localhost:3000" }, data: { bookId: id, kind: "pdf", name: "book.pdf", size: 10 },
+  })).status()).toBe(401);
+  expect((await request.post(`/api/admin/upload/finish`, {
+    headers: { Origin: "http://localhost:3000" }, data: { ticket: "invalid" },
+  })).status()).toBe(401);
   expect((await request.get(`/api/previews/${id}`)).status()).toBe(503);
   expect(
     (

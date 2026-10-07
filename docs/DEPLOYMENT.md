@@ -17,6 +17,8 @@ For an existing BoiShelf Supabase project, apply **only** the new `2026100505574
 
 The migrations create ten RLS-protected public tables and two **private** storage buckets (`ebooks`, `covers`). Browser roles can read only published metadata and their own orders/entitlements. Preview paths and cleanup jobs are service-only. They cannot alter purchases, upload objects or read ebook paths. The server secret is used only in server-only modules.
 
+For admin uploads, open **Storage → ebooks → Bucket settings** and allow individual files up to 30 MB, with PDF and EPUB MIME types. The bucket stays private. No additional migration or Render variable is needed for the signed, resumable PDF/EPUB upload flow.
+
 Set `.env.local` or Render environment variables:
 
 | Variable                               | Value                                                            |

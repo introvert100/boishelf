@@ -10,6 +10,8 @@ import type { Book } from "@/lib/types";
 import { useLanguage } from "./store";
 import { PreviewDialog } from "./preview-dialog";
 import { SourceViewer } from "./source-viewer";
+import { CoverCropDialog } from "./cover-crop-dialog";
+import { uploadEbook } from "@/lib/resumable-upload";
 
 const uploadKinds: UploadKind[] = ["cover", "pdf", "epub"];
 type UploadState = { progress: number; filename: string; phase: "uploading" | "processing" | "done" | "error"; error?: string; replaced?: boolean };
@@ -67,6 +69,27 @@ const bnErrors: Record<string, string> = {
   "Could not read the preview source PDF.": "প্রিভিউর উৎস PDF পড়া যায়নি। আবার চেষ্টা করুন।",
   "This book already has a PDF ebook. Set its preview page count instead.": "এই বইয়ে PDF আছে। আলাদা নমুনা আপলোড না করে প্রিভিউ পৃষ্ঠা সংখ্যা ঠিক করুন।",
   "Upload the EPUB ebook before adding a sample PDF.": "নমুনা PDF যোগ করার আগে EPUB আপলোড করুন।",
+  "The file exceeds the Supabase Storage limit. In Supabase Storage settings, allow ebooks up to 30 MB.": "ফাইলটি Supabase Storage-এর সীমা ছাড়িয়েছে। Storage settings-এ ebooks-এর সীমা ৩০ MB করুন।",
+  "Supabase rejected this file type. Check that the private ebook bucket accepts PDF and EPUB.": "Supabase ফাইলের ধরন গ্রহণ করেনি। ব্যক্তিগত ebooks bucket-এ PDF ও EPUB অনুমোদিত আছে কি না দেখুন।",
+  "The book upload database function is missing. Apply the latest BoiShelf migration in Supabase, then retry.": "বই আপলোডের ডেটাবেস ফাংশন নেই। Supabase-এ সর্বশেষ BoiShelf migration প্রয়োগ করে আবার চেষ্টা করুন।",
+  "Supabase Storage could not save or read this file. Check the private bucket, its size limit, and Storage logs.": "Supabase Storage ফাইল সংরক্ষণ বা পড়তে পারেনি। ব্যক্তিগত bucket, ফাইলের সীমা ও Storage logs দেখুন।",
+  "The file reached Storage, but the book record could not be updated. Check Supabase database logs.": "ফাইল Storage-এ পৌঁছেছে, কিন্তু বইয়ের তথ্য সংরক্ষণ হয়নি। Supabase database logs দেখুন।",
+  "Upload session is invalid. Choose the file again.": "আপলোড সেশনটি বৈধ নয়। ফাইলটি আবার বেছে নিন।",
+  "Upload session expired or invalid. Choose the file again.": "আপলোড সেশনের মেয়াদ শেষ বা এটি ভুল। ফাইলটি আবার বেছে নিন।",
+  "Supabase Storage rejected the file size. Check that the ebook bucket allows up to 30 MB.": "Supabase Storage ফাইলের আকার গ্রহণ করেনি। ebooks bucket-এ ৩০ MB পর্যন্ত অনুমতি দিন।",
+  "Supabase Storage rejected this upload. Check the private ebook bucket's size and PDF/EPUB type settings.": "Supabase Storage আপলোড গ্রহণ করেনি। ব্যক্তিগত ebooks bucket-এর ফাইলের সীমা ও PDF/EPUB অনুমতি দেখুন।",
+  "Supabase Storage refused this upload. Reload and retry; if it persists, check the Storage configuration.": "Supabase Storage আপলোডের অনুমতি দেয়নি। পাতা রিফ্রেশ করে চেষ্টা করুন; না হলে Storage settings দেখুন।",
+  "Upload setup is incomplete. Reload the page and retry.": "আপলোড শুরু করা যায়নি। পাতা রিফ্রেশ করে আবার চেষ্টা করুন।",
+  "The server returned an unreadable response.": "সার্ভার থেকে বোঝার মতো উত্তর পাওয়া যায়নি। আবার চেষ্টা করুন।",
+  "The file arrived, but the book could not be saved.": "ফাইল পৌঁছেছে, কিন্তু বইয়ের সঙ্গে সংরক্ষণ করা যায়নি। আবার চেষ্টা করুন।",
+  "The uploaded file could not be saved to the book. Please retry.": "আপলোড করা ফাইলটি বইয়ের সঙ্গে সংরক্ষণ করা যায়নি। আবার চেষ্টা করুন।",
+  "This file is not a valid PDF. Choose the correct file and retry.": "ফাইলটি বৈধ PDF নয়। সঠিক ফাইল বেছে নিয়ে আবার চেষ্টা করুন।",
+  "This file is not a valid EPUB. Choose the correct file and retry.": "ফাইলটি বৈধ EPUB নয়। সঠিক ফাইল বেছে নিয়ে আবার চেষ্টা করুন।",
+  "Restore this archived book before changing its files.": "ফাইল বদলানোর আগে আর্কাইভ করা বইটি ফিরিয়ে আনুন।",
+  "The preview changed in another tab. Refresh and retry the PDF upload.": "অন্য ট্যাবে প্রিভিউ বদলেছে। পাতা রিফ্রেশ করে PDF আবার আপলোড করুন।",
+  "Book not found. Refresh the admin page.": "বইটি পাওয়া যায়নি। অ্যাডমিন পাতা রিফ্রেশ করুন।",
+  "Uploaded file size changed. Choose the file and retry.": "আপলোড করা ফাইলের আকার মেলেনি। ফাইলটি আবার বেছে নিন।",
+  "Upload is incomplete. Choose the file and retry.": "আপলোড শেষ হয়নি। ফাইলটি আবার বেছে নিয়ে চেষ্টা করুন।",
 };
 
 function uploadFile(bookId: string, kind: UploadKind, file: File, onProgress: (progress: number) => void): Promise<{ name: string; path?: string; previewPages?: number; sourcePages?: number }> {
@@ -120,6 +143,8 @@ export function BookEditor({
   const [previewError, setPreviewError] = useState("");
   const [previewOpen, setPreviewOpen] = useState(false);
   const [sourceOpen, setSourceOpen] = useState<"pdf" | "epub" | "sample" | null>(null);
+  const [coverFile, setCoverFile] = useState<File | null>(null);
+  const [coverRevision, setCoverRevision] = useState(0);
   const hasEbook = !!book?.formats.some((format) => format === "PDF" || format === "EPUB") || uploads.pdf?.phase === "done" || uploads.epub?.phase === "done";
   const hasCover = !!book?.cover_path || uploads.cover?.phase === "done";
   const missingPublicationFile = !hasEbook
@@ -136,6 +161,8 @@ export function BookEditor({
     if (maximum) return `শেষ পৃষ্ঠাটি ক্রেতাদের জন্য রাখতে সর্বোচ্চ ${maximum[1]} পৃষ্ঠা প্রিভিউ দিন।${suffix}`;
     const sample = /^This sample PDF has only (\d+) pages\.$/.exec(base);
     if (sample) return `নমুনা PDF-এ মাত্র ${sample[1]} পৃষ্ঠা আছে।${suffix}`;
+    const interrupted = /^Direct upload was interrupted(?: \(HTTP (\d+)\))?\. Check your connection and retry\.$/.exec(base);
+    if (interrupted) return `সরাসরি আপলোডে বাধা এসেছে${interrupted[1] ? ` (HTTP ${interrupted[1]})` : ""}। সংযোগ পরীক্ষা করে আবার চেষ্টা করুন।${suffix}`;
     return `${bnErrors[base] || base}${suffix}`;
   }
   function change(field: keyof BookFormValues, value: string | boolean) {
@@ -209,23 +236,26 @@ export function BookEditor({
     } finally { busyRef.current = false; setBusy(false); }
   }
 
-  async function upload(kind: UploadKind, file?: File) {
-    if (!book?.id || !file) return;
-    if (busyRef.current) return;
+  async function upload(kind: UploadKind, file?: File): Promise<string | null> {
+    if (!book?.id || !file) return t("প্রথমে বই সংরক্ষণ করুন।", "Save the book first.");
+    if (busyRef.current) return t("আগের কাজটি শেষ হওয়া পর্যন্ত অপেক্ষা করুন।", "Wait for the current action to finish.");
     const existing = kind === "cover" ? !!book.cover_path : book.formats.includes(kind.toUpperCase());
     const problem = uploadProblem(kind, file.name, file.size);
     if (problem) {
       setUploads((current) => ({ ...current, [kind]: { phase: "error", progress: 0, filename: file.name, error: problem } }));
-      return;
+      return localize(problem);
     }
     busyRef.current = true; setBusy(true); setFormError(""); setNotice("");
     setUploads((current) => ({ ...current, [kind]: { phase: "uploading", progress: 0, filename: file.name } }));
     try {
-      const result = await uploadFile(book.id, kind, file, (progress) => {
+      const result = await (kind === "cover" ? uploadFile(book.id, kind, file, (progress) => {
         setUploads((current) => ({ ...current, [kind]: { phase: progress === 100 ? "processing" : "uploading", progress, filename: file.name } }));
-      });
+      }) : uploadEbook(book.id, kind, file, (progress) => {
+        setUploads((current) => ({ ...current, [kind]: { phase: progress === 100 ? "processing" : "uploading", progress, filename: file.name } }));
+      }));
       setUploads((current) => ({ ...current, [kind]: { phase: "done", progress: 100, filename: result.name, replaced: existing } }));
       onUploaded(book.id, kind, result.name, result.path);
+      if (kind === "cover") setCoverRevision((current) => current + 1);
       if (kind === "pdf" && result.previewPages !== undefined) {
         setPreviewCount(String(result.previewPages));
         setInspectedPages(result.sourcePages || null);
@@ -234,9 +264,23 @@ export function BookEditor({
       }
       onSuccess(t(`${kind.toUpperCase()} ফাইল সংরক্ষিত হয়েছে।`, `${kind.toUpperCase()} uploaded successfully.`));
       router.refresh();
+      return null;
     } catch (error) {
-      setUploads((current) => ({ ...current, [kind]: { phase: "error", progress: 0, filename: file.name, error: (error as Error).message } }));
+      const message = localize((error as Error).message);
+      setUploads((current) => ({ ...current, [kind]: { phase: "error", progress: 0, filename: file.name, error: message } }));
+      return message;
     } finally { busyRef.current = false; setBusy(false); }
+  }
+
+  function chooseCover(file?: File) {
+    if (!file) return;
+    const problem = uploadProblem("cover", file.name, file.size);
+    if (problem) {
+      setUploads((current) => ({ ...current, cover: { phase: "error", progress: 0, filename: file.name, error: problem } }));
+      return;
+    }
+    setUploads((current) => { const next = { ...current }; delete next.cover; return next; });
+    setCoverFile(file);
   }
 
   async function addSamplePdf() {
@@ -388,12 +432,20 @@ export function BookEditor({
         const label = kind === "cover" ? t("প্রচ্ছদের ছবি · PNG/JPG/WebP · সর্বোচ্চ ৫ MB", "Cover image · PNG/JPG/WebP · up to 5 MB") : kind === "pdf" ? t("PDF ইবুক · সর্বোচ্চ ৩০ MB", "PDF ebook · up to 30 MB") : t("EPUB ইবুক · সর্বোচ্চ ৩০ MB", "EPUB ebook · up to 30 MB");
         return <div className="upload-card" key={kind}>
           <label htmlFor={`upload-${kind}`}><span><Upload size={16} /> {label}</span>
-            <input id={`upload-${kind}`} type="file" disabled={busy} accept={kind === "cover" ? ".png,.jpg,.jpeg,.webp,image/png,image/jpeg,image/webp" : `.${kind}`} onChange={(e) => { void upload(kind, e.target.files?.[0]); e.target.value = ""; }} aria-describedby={`${kind}-status`} />
+            <input id={`upload-${kind}`} type="file" disabled={busy} accept={kind === "cover" ? ".png,.jpg,.jpeg,.webp,image/png,image/jpeg,image/webp" : `.${kind}`} onChange={(e) => {
+              if (kind === "cover") chooseCover(e.target.files?.[0]);
+              else void upload(kind, e.target.files?.[0]);
+              e.target.value = "";
+            }} aria-describedby={`${kind}-status`} />
           </label>
           <p id={`${kind}-status`} className={state?.phase === "error" ? "field-error" : "field-help"} role={state?.phase === "error" ? "alert" : "status"}>
             {state?.phase === "error" ? `${state.filename}: ${localize(state.error || "Upload failed. Please retry.")}` : state?.phase === "uploading" ? `${t("আপলোড হচ্ছে", "Uploading")} ${state.progress}% — ${state.filename}` : state?.phase === "processing" ? `${t("সংরক্ষণ হচ্ছে", "Finishing")} — ${state.filename}` : state?.phase === "done" ? `${state.filename} — ${state.replaced ? t("আগের ফাইল বদলানো হয়েছে", "previous file replaced") : t("আপলোড হয়েছে", "uploaded")}` : existing ? `${existingName || t("ফাইল আপলোড করা আছে", "File uploaded")} · ${t("বদলাতে নতুন ফাইল বেছে নিন", "Choose a new file to replace it")}` : t("কোনো ফাইল আপলোড করা হয়নি", "No file uploaded yet")}
           </p>
           {state?.phase === "uploading" && <progress value={state.progress} max="100" aria-label={`${kind.toUpperCase()} upload progress`} />}
+          {kind === "cover" && existing && <div className="admin-cover-preview">
+            <img src={`/api/covers/${book.id}?v=${coverRevision}`} alt={t("বর্তমান প্রচ্ছদ", "Current cover")} />
+            <span className="field-help">{t("বর্তমান প্রচ্ছদ। বদলাতে উপরে নতুন ছবি বেছে নিয়ে কাটুন।", "Current cover. Choose a new image above to crop and replace it.")}</span>
+          </div>}
           {kind !== "cover" && (existing || state?.phase === "done") && <button type="button" className="button secondary" disabled={busy}
             onClick={() => setSourceOpen(kind)}>{kind === "pdf" ? t("PDF দেখে প্রিভিউ বাছুন", "Inspect PDF and choose preview") : t("EPUB-এর অধ্যায় দেখুন", "Read EPUB chapters")}</button>}
         </div>;
@@ -419,6 +471,7 @@ export function BookEditor({
         {!!book.preview_pages && <button type="button" className="button secondary" onClick={() => setPreviewOpen(true)}>{t("দর্শকের মতো প্রিভিউ দেখুন", "View preview as visitor")}</button>}
       </div>
       <PreviewDialog bookId={book.id} admin open={previewOpen} onClose={() => setPreviewOpen(false)} />
+      {coverFile && <CoverCropDialog file={coverFile} onClose={() => setCoverFile(null)} onUpload={(cropped) => upload("cover", cropped)} />}
       {sourceOpen && <SourceViewer bookId={book.id} kind={sourceOpen} open onClose={() => setSourceOpen(null)} onSavePages={savePreview} onInspected={setInspectedPages} />}
     </section> : <p className="field-help file-step">{t("প্রথমে তথ্য সংরক্ষণ করুন। তারপর এখানে প্রচ্ছদ, PDF ও EPUB আপলোডের ঘর দেখা যাবে।", "Save the book information first. The cover, PDF, and EPUB upload controls will appear here.")}</p>}
   </div>;
