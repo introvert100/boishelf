@@ -251,15 +251,31 @@ export function Shell({
 }
 
 export function Cover({ book, hero = false }: { book: Book; hero?: boolean }) {
-  const { locale } = useLanguage();
+  const { locale, t } = useLanguage();
+  const image = useRef<HTMLImageElement>(null);
+  const [state, setState] = useState<"loading" | "loaded" | "error">("loading");
+  useEffect(() => {
+    if (!book.cover_path) return;
+    setState("loading");
+    const current = image.current;
+    if (current?.complete) setState(current.naturalWidth > 0 ? "loaded" : "error");
+  }, [book.id, book.cover_path]);
   if (book.cover_path)
     return (
       <div className={`cover cover-uploaded ${hero ? "hero-cover" : ""}`}>
         <img
+          ref={image}
           src={`/api/covers/${book.id}`}
           alt={locale === "bn" ? book.title_bn : book.title_en}
           loading={hero ? "eager" : "lazy"}
+          onLoad={() => setState("loaded")}
+          onError={() => setState("error")}
+          className={state === "loaded" ? "" : "cover-image-pending"}
         />
+        {state !== "loaded" && <span className="cover-image-status" role={state === "error" ? "alert" : "status"}>
+          {state === "loading" ? <><LoaderCircle size={18} aria-hidden="true" />{t("প্রচ্ছদ লোড হচ্ছে…", "Loading cover image…")}</>
+            : t("প্রচ্ছদ লোড হয়নি। পাতা আবার খুলুন।", "Cover unavailable. Reload to retry.")}
+        </span>}
       </div>
     );
   return (

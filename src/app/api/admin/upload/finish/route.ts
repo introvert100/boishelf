@@ -4,6 +4,7 @@ import { detectUpload } from "@/lib/admin-validation";
 import { AppError, checkOrigin, jsonBody, rateLimit } from "@/lib/http";
 import { PreviewPdfError } from "@/lib/preview-pdf";
 import { serviceClient } from "@/lib/supabase";
+import { savedPdfPageCount, savePdfPageCount } from "@/lib/book-pages";
 
 export async function POST(request: Request) {
   let stage = "validation";
@@ -27,12 +28,15 @@ export async function POST(request: Request) {
       .select("storage_path").eq("book_id", upload.bookId).eq("format", upload.kind).maybeSingle();
     if (currentError) throw currentError;
     if (current?.storage_path === upload.path) {
-      const { data: preview } = upload.kind === "pdf"
-        ? await db.from("book_previews").select("preview_pages,source_page_count").eq("book_id", upload.bookId).maybeSingle()
-        : { data: null };
+      const { data: preview, error: previewError } = upload.kind === "pdf"
+        ? await db.from("book_previews").select("preview_pages").eq("book_id", upload.bookId).maybeSingle()
+        : { data: null, error: null };
+      if (previewError) throw previewError;
+      const sourcePages = upload.kind === "pdf" ? await savedPdfPageCount(db, upload.bookId) : undefined;
+      if (sourcePages) await savePdfPageCount(db, upload.bookId, sourcePages);
       return Response.json({ ok: true, name: upload.name, path: upload.path,
         previewPages: upload.kind === "pdf" ? preview?.preview_pages || 0 : undefined,
-        sourcePages: upload.kind === "pdf" ? preview?.source_page_count || 0 : undefined });
+        sourcePages });
     }
     stage = "storage_read";
     const { data: file, error: downloadError } = await db.storage.from("ebooks").download(upload.path);

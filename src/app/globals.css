@@ -1678,11 +1678,30 @@ td a {
   padding: 0;
   background: transparent;
 }
+.cover-uploaded .cover-image-pending { opacity: 0; }
 .cover-uploaded img {
   width: 100%;
   height: 100%;
   object-fit: cover;
 }
+.cover-image-status {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px;
+  background: #edf1e9;
+  color: #345746;
+  text-align: center;
+  font-size: 12px;
+  line-height: 1.4;
+}
+.cover-image-status svg { animation: cover-spin 1.2s linear infinite; }
+@keyframes cover-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .cover-image-status svg { animation: none; } }
 .sr-only {
   position: absolute;
   width: 1px;

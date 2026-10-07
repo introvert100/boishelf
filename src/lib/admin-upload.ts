@@ -3,7 +3,8 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { ZodError } from "zod";
 import { AppError, logEvent } from "./http";
-import { makePreviewPdf, PreviewPdfError } from "./preview-pdf";
+import { inspectPdf, makePreviewPdf, PreviewPdfError } from "./preview-pdf";
+import { cachePdfPageCount, savePdfPageCount } from "./book-pages";
 import { queueStorageCleanup, runStorageCleanup } from "./storage-cleanup";
 import { ebookLimitBytes } from "./upload-limits";
 
@@ -79,6 +80,7 @@ export async function commitEbook(db: SupabaseClient, input: {
   if (previewError) throw previewError;
   const excerpt = kind === "pdf" && preview && preview.preview_pages > 0
     ? await makePreviewPdf(bytes, preview.preview_pages, true) : null;
+  const sourcePages = kind === "pdf" ? excerpt?.sourcePages || await inspectPdf(bytes) : undefined;
   const excerptPath = excerpt ? `${bookId}/previews/${crypto.randomUUID()}.pdf` : null;
   if (excerptPath && excerpt) {
     const { error } = await db.storage.from("ebooks")
@@ -111,6 +113,10 @@ export async function commitEbook(db: SupabaseClient, input: {
     }
     throw error;
   }
+  if (kind === "pdf" && sourcePages) {
+    if (!excerpt) await cachePdfPageCount(db, bookId, path, sourcePages);
+    await savePdfPageCount(db, bookId, sourcePages);
+  }
   if (excerptPath) await queueStorageCleanup(bookId, [
     { bucket: "ebooks", path: preview?.preview_path || null },
     { bucket: "ebooks", path: preview?.source_kind === "sample_pdf" ? preview.source_path : null },
@@ -120,5 +126,5 @@ export async function commitEbook(db: SupabaseClient, input: {
   }
   return { ok: true, name, path,
     previewPages: kind === "pdf" ? excerpt ? preview!.preview_pages : 0 : undefined,
-    sourcePages: kind === "pdf" ? excerpt?.sourcePages || 0 : undefined };
+    sourcePages };
 }

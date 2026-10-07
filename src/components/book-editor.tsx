@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { LoaderCircle, Upload, X } from "lucide-react";
 import { bookInput, detectUpload, uploadProblem, type UploadKind } from "@/lib/admin-validation";
@@ -101,6 +101,9 @@ const bnErrors: Record<string, string> = {
   "Book not found. Refresh the admin page.": "বইটি পাওয়া যায়নি। অ্যাডমিন পাতা রিফ্রেশ করুন।",
   "Uploaded file size changed. Choose the file and retry.": "আপলোড করা ফাইলের আকার মেলেনি। ফাইলটি আবার বেছে নিন।",
   "Upload is incomplete. Choose the file and retry.": "আপলোড শেষ হয়নি। ফাইলটি আবার বেছে নিয়ে চেষ্টা করুন।",
+  "Upload a PDF ebook before detecting its pages.": "পৃষ্ঠা গণনার আগে PDF ইবুক আপলোড করুন।",
+  "Could not read the PDF to detect its pages.": "পৃষ্ঠা গণনার জন্য PDF পড়া যায়নি। পরে আবার চেষ্টা করুন।",
+  "Could not detect PDF pages.": "PDF-এর পৃষ্ঠা সংখ্যা জানা যায়নি।",
 };
 
 function uploadFile(bookId: string, kind: UploadKind, file: File, onProgress: (progress: number) => void): Promise<{ name: string; path?: string; previewPages?: number; sourcePages?: number }> {
@@ -127,7 +130,7 @@ function uploadFile(bookId: string, kind: UploadKind, file: File, onProgress: (p
 }
 
 export function BookEditor({
-  book, ownerId, sandbox, restored, onSaved, onUploaded, onPreviewSaved, onSuccess, onClose, onDraftChange,
+  book, ownerId, sandbox, restored, onSaved, onUploaded, onPreviewSaved, onPagesDetected, onSuccess, onClose, onDraftChange,
 }: {
   book?: Book;
   ownerId: string;
@@ -136,13 +139,17 @@ export function BookEditor({
   onSaved: (id: string, values: BookFormValues) => void;
   onUploaded: (id: string, kind: UploadKind, name: string, path?: string) => void;
   onPreviewSaved: (id: string, pages: number, sourcePages: number, sourceKind: "book_pdf" | "sample_pdf" | null) => void;
+  onPagesDetected: (id: string, pages: number) => void;
   onSuccess: (message: string) => void;
   onClose: () => void;
   onDraftChange: (values: BookFormValues | null) => void;
 }) {
   const { t, locale } = useLanguage();
   const router = useRouter();
-  const [values, setValues] = useState<BookFormValues>(book ? bookValues(book) : { ...(restored || blankBook), published: false });
+  const [values, setValues] = useState<BookFormValues>(book
+    ? { ...bookValues(book), pages: String(book.preview_source_kind === "book_pdf" && book.preview_source_pages
+      ? book.preview_source_pages : book.pages) }
+    : { ...(restored || blankBook), published: false });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [formError, setFormError] = useState("");
   const [notice, setNotice] = useState("");
@@ -151,6 +158,8 @@ export function BookEditor({
   const [uploads, setUploads] = useState<Partial<Record<UploadKind, UploadState>>>({});
   const [previewCount, setPreviewCount] = useState(String(book?.preview_pages || 0));
   const [inspectedPages, setInspectedPages] = useState<number | null>(book?.preview_source_pages || null);
+  const [pageDetection, setPageDetection] = useState<"idle" | "loading" | "done" | "error">("idle");
+  const [pageDetectionError, setPageDetectionError] = useState("");
   const [previewError, setPreviewError] = useState("");
   const [previewOpen, setPreviewOpen] = useState(false);
   const [sourceOpen, setSourceOpen] = useState<"pdf" | "epub" | "sample" | null>(null);
@@ -158,6 +167,32 @@ export function BookEditor({
   const [coverRevision, setCoverRevision] = useState(0);
   const hasEbook = !!book?.formats.some((format) => format === "PDF" || format === "EPUB") || uploads.pdf?.phase === "done" || uploads.epub?.phase === "done";
   const hasCover = !!book?.cover_path || uploads.cover?.phase === "done";
+  const hasPdf = !!book?.formats.includes("PDF");
+
+  useEffect(() => {
+    if (!book?.id || !hasPdf) return;
+    const controller = new AbortController();
+    setPageDetection("loading"); setPageDetectionError("");
+    void fetch(`/api/admin/books/${book.id}/pages`, { method: "POST", signal: controller.signal })
+      .then(async (response) => {
+        const result = await response.json();
+        if (!response.ok || !Number.isInteger(result.pages))
+          throw new Error(`${result.error || "Could not detect PDF pages."}${result.requestId ? ` (request ${result.requestId})` : ""}`);
+        if (controller.signal.aborted) return;
+        setInspectedPages(result.pages);
+        setValues((current) => ({ ...current, pages: String(result.pages) }));
+        setErrors((current) => { const copy = { ...current }; delete copy.pages; return copy; });
+        onPagesDetected(book.id, result.pages);
+        setPageDetection("done");
+        if (result.pages !== book.pages) router.refresh();
+      })
+      .catch((error) => {
+        if (controller.signal.aborted) return;
+        setPageDetection("error");
+        setPageDetectionError((error as Error).message || "Could not detect PDF pages.");
+      });
+    return () => controller.abort();
+  }, [book?.id, hasPdf]);
   const missingPublicationFile = !hasEbook
     ? "Upload a PDF or EPUB before publishing."
     : !values.is_demo && !hasCover
@@ -198,6 +233,10 @@ export function BookEditor({
   async function save(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (busyRef.current) return;
+    if (hasPdf && pageDetection === "loading") {
+      setFormError(t("PDF-এর পৃষ্ঠা গণনা শেষ হলে আবার সংরক্ষণ করুন।", "Wait for PDF page detection to finish before saving."));
+      return;
+    }
     setFormError(""); setNotice(""); setErrors({});
     const body = {
       ...values, id: book?.id,
@@ -276,6 +315,12 @@ export function BookEditor({
         setInspectedPages(result.sourcePages || null);
         onPreviewSaved(book.id, result.previewPages, result.sourcePages || 0,
           result.previewPages > 0 ? "book_pdf" : null);
+        if (result.sourcePages) {
+          setValues((current) => ({ ...current, pages: String(result.sourcePages) }));
+          setErrors((current) => { const next = { ...current }; delete next.pages; return next; });
+          onPagesDetected(book.id, result.sourcePages);
+          setPageDetection("done");
+        }
       }
       onSuccess(t(`${kind.toUpperCase()} ফাইল সংরক্ষিত হয়েছে।`, `${kind.toUpperCase()} uploaded successfully.`));
       router.refresh();
@@ -384,7 +429,7 @@ export function BookEditor({
   function input(name: keyof BookFormValues, label: string, helper?: string) {
     return <label key={name} htmlFor={`book-${name}`}>
       {label}
-      <input id={`book-${name}`} name={name} value={String(values[name])} onChange={(e) => change(name, e.target.value)} inputMode={name === "price" ? "decimal" : name === "pages" ? "numeric" : undefined} autoCapitalize={name === "slug" ? "none" : undefined} spellCheck={name === "slug" ? false : undefined} aria-required="true" aria-invalid={!!errors[name]} aria-describedby={[helper && `${name}-help`, errors[name] && `${name}-error`].filter(Boolean).join(" ") || undefined} />
+      <input id={`book-${name}`} name={name} value={String(values[name])} onChange={(e) => change(name, e.target.value)} readOnly={name === "pages" && hasPdf && pageDetection !== "error"} inputMode={name === "price" ? "decimal" : name === "pages" ? "numeric" : undefined} autoCapitalize={name === "slug" ? "none" : undefined} spellCheck={name === "slug" ? false : undefined} aria-required="true" aria-invalid={!!errors[name]} aria-describedby={[helper && `${name}-help`, errors[name] && `${name}-error`].filter(Boolean).join(" ") || undefined} />
       {helper && <span id={`${name}-help`} className="field-help">{helper}</span>}
       {fieldError(name)}
     </label>;
@@ -419,7 +464,12 @@ export function BookEditor({
         {input("price", t("মূল্য (টাকা)", "Price (BDT)"), t("১০ থেকে ১,০০,০০০ টাকা; দশমিকের পরে সর্বোচ্চ ২ সংখ্যা।", "10–100,000 BDT; up to two decimal places."))}
         {select("category", t("বিভাগ", "Category"), categories.filter((x) => x.id !== "all").map((x) => ({ value: x.id, label: x[locale] })))}
         {select("language", t("ভাষা", "Language"), [{ value: "bn", label: "বাংলা" }, { value: "en", label: "English" }])}
-        {input("pages", t("পৃষ্ঠা", "Pages"), t("১ থেকে ২০,০০০-এর মধ্যে পূর্ণসংখ্যা।", "A whole number between 1 and 20,000."))}
+        {input("pages", t("পৃষ্ঠা", "Pages"), hasPdf
+          ? t("PDF-এর পৃষ্ঠা স্বয়ংক্রিয়ভাবে শনাক্ত ও সংরক্ষিত হয়।", "PDF pages are detected and saved automatically.")
+          : t("PDF আপলোড করলে পৃষ্ঠা স্বয়ংক্রিয়ভাবে পূরণ হবে। EPUB-এর জন্য নিজে লিখুন।", "Uploading a PDF fills this automatically. Enter it yourself for EPUB."))}
+        {hasPdf && pageDetection === "loading" && <p className="field-help" role="status">{t("PDF-এর পৃষ্ঠা গণনা হচ্ছে…", "Detecting PDF pages…")}</p>}
+        {hasPdf && pageDetection === "done" && inspectedPages && <p className="field-help" role="status">{t(`PDF-এ ${inspectedPages} পৃষ্ঠা শনাক্ত হয়েছে।`, `Detected ${inspectedPages} PDF pages.`)}</p>}
+        {hasPdf && pageDetection === "error" && <p className="field-help error" role="alert">{t("PDF-এর পৃষ্ঠা স্বয়ংক্রিয়ভাবে গণনা করা যায়নি। পরে আবার চেষ্টা করুন অথবা সংখ্যা লিখুন।", "Could not detect PDF pages automatically. Reopen the editor to retry or enter the count manually.")} {localize(pageDetectionError)}</p>}
         {select("cover_style", t("প্রচ্ছদের রং", "Fallback cover colour"), ["forest", "blue", "orange", "pink", "olive", "violet", "yellow", "red"].map((x) => ({ value: x, label: x })))}
       </div>
       {(["description_bn", "description_en"] as const).map((name) => <label key={name} htmlFor={`book-${name}`}>
@@ -438,7 +488,7 @@ export function BookEditor({
         <li>{values.is_demo || hasCover ? "✓" : "○"} {values.is_demo ? t("নমুনা বইয়ের জন্য প্রচ্ছদ ঐচ্ছিক", "Cover optional for sample book") : t("প্রচ্ছদ আপলোড", "Cover uploaded")}</li>
       </ul>}
       {fieldError("published")}
-      <button className="button" type="submit" disabled={busy}>{busy && <LoaderCircle className="spin" size={16} />} {!book ? t("খসড়া সংরক্ষণ করুন", "Save as draft") : values.published && !book.published ? t("বই প্রকাশ করুন", "Publish book") : t("পরিবর্তন সংরক্ষণ করুন", "Save changes")}</button>
+      <button className="button" type="submit" disabled={busy || hasPdf && pageDetection === "loading"}>{busy && <LoaderCircle className="spin" size={16} />} {!book ? t("খসড়া সংরক্ষণ করুন", "Save as draft") : values.published && !book.published ? t("বই প্রকাশ করুন", "Publish book") : t("পরিবর্তন সংরক্ষণ করুন", "Save changes")}</button>
     </form>
     {book ? <section className="file-step" aria-label={t("ফাইল আপলোড", "Upload files")}>
       <h3>{t("ধাপ ৩: প্রচ্ছদ ও ইবুক ফাইল", "Step 3: cover and ebook files")}</h3>

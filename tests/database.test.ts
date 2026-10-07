@@ -421,6 +421,19 @@ test("PostgreSQL migration, access policies and atomic payment transitions", asy
       "select storage_path from book_formats where book_id=$1 and format='pdf'", [book]);
     assert.equal(paid.rows[0].storage_path, "private/new.pdf");
   });
+  await t.test("PDF page metadata can be saved without publishing a preview", async () => {
+    const id = "66666666-6666-4666-8666-666666666666";
+    await db.query(`insert into books(id,slug,title_bn,title_en,author_bn,author_en,description_bn,description_en,category,price_paisa,pages)
+      values($1,'page-metadata','বই','Page metadata','লেখক','Author','বিবরণ','Description','fiction',1000,1)`, [id]);
+    await db.query("insert into book_formats(book_id,format,storage_path,original_name,size_bytes) values($1,'pdf','private/count.pdf','count.pdf',100)", [id]);
+    await db.query("select save_book_preview($1,$2,$3,$4,$5,$6,$7,$8)",
+      [id, null, null, "book_pdf", "private/count.pdf", 158, null, 0]);
+    const { rows } = await db.query<{ source_page_count: number; preview_pages: number; preview_path: string | null }>(
+      "select source_page_count,preview_pages,preview_path from book_previews where book_id=$1", [id]);
+    assert.deepEqual(rows[0], { source_page_count: 158, preview_pages: 0, preview_path: null });
+    await assert.rejects(asRole("anon", null,
+      () => db.query("select book_id from book_previews where book_id=$1", [id])));
+  });
   await t.test("ordered books archive without losing a buyer's entitlement", async () => {
     await assert.rejects(() => db.query("select delete_unsold_book($1)", [book]), /book_has_orders/);
     await db.query("update books set archived_at=now(),published=false where id=$1", [book]);

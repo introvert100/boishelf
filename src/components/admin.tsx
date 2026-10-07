@@ -257,6 +257,12 @@ export function Admin({
                   preview_source_kind: sourceKind || undefined } : current;
               });
             }}
+            onPagesDetected={(id, pages) => {
+              setRecentBook((current) => {
+                const existing = current?.id === id ? current : books.find((book) => book.id === id);
+                return existing ? { ...existing, pages } : current;
+              });
+            }}
             onSaved={(id, values) => {
               const existing = recentBook?.id === id ? recentBook : books.find((book) => book.id === id);
               setRecentBook({
