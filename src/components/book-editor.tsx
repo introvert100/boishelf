@@ -88,6 +88,7 @@ const bnErrors: Record<string, string> = {
   "Supabase Storage rejected the file size. Check the global Storage limit and set the ebooks bucket limit to 50 MB.": "Supabase-এর global Storage সীমা দেখুন এবং ebooks bucket-এর সীমা ৫০ MB করুন।",
   "Supabase Storage rejected the file type. Allow application/pdf and application/epub+zip in the private ebooks bucket.": "ব্যক্তিগত ebooks bucket-এ application/pdf ও application/epub+zip ফাইলের অনুমতি দিন।",
   "Supabase Storage rejected this upload. Check the Storage error code, global limit, and ebooks bucket settings.": "Supabase আপলোড গ্রহণ করেনি। Storage error code, global limit ও ebooks bucket settings দেখুন।",
+  "Supabase refused the signed upload. Reload the page and retry. If it still fails, check that this site uses the correct Supabase project key.": "Supabase স্বাক্ষরিত আপলোড গ্রহণ করেনি। পাতা রিফ্রেশ করে আবার চেষ্টা করুন। তবু ব্যর্থ হলে এই সাইটে সঠিক Supabase project key ব্যবহার হচ্ছে কি না দেখুন।",
   "Upload setup is incomplete. Reload the page and retry.": "আপলোড শুরু করা যায়নি। পাতা রিফ্রেশ করে আবার চেষ্টা করুন।",
   "The server returned an unreadable response.": "সার্ভার থেকে বোঝার মতো উত্তর পাওয়া যায়নি। আবার চেষ্টা করুন।",
   "The file arrived, but the book could not be saved.": "ফাইল পৌঁছেছে, কিন্তু বইয়ের সঙ্গে সংরক্ষণ করা যায়নি। আবার চেষ্টা করুন।",

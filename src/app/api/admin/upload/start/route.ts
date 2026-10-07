@@ -5,6 +5,7 @@ import { uploadProblem } from "@/lib/admin-validation";
 import { AppError, checkOrigin, jsonBody, rateLimit } from "@/lib/http";
 import { serviceClient } from "@/lib/supabase";
 import { ebookLimitBytes, bytesPerMb } from "@/lib/upload-limits";
+import { signedResumableEndpoint } from "@/lib/signed-upload";
 
 const input = z.object({
   bookId: z.uuid(), kind: z.enum(["pdf", "epub"]), name: z.string().min(1).max(255),
@@ -38,13 +39,10 @@ export async function POST(request: Request) {
     stage = "storage_upload";
     const { data: signed, error } = await db.storage.from("ebooks").createSignedUploadUrl(path);
     if (error || !signed?.token) throw error || new Error("Missing signed upload token");
-    const origin = new URL(process.env.NEXT_PUBLIC_SUPABASE_URL!);
-    if (origin.hostname.endsWith(".supabase.co"))
-      origin.hostname = origin.hostname.replace(/\.supabase\.co$/, ".storage.supabase.co");
     return Response.json({
       ticket: issueUploadTicket({ bookId: data.bookId, kind: data.kind, path, name, size: data.size }),
       token: signed.token,
-      endpoint: `${origin.origin}/storage/v1/upload/resumable`,
+      endpoint: signedResumableEndpoint(process.env.NEXT_PUBLIC_SUPABASE_URL!),
       path,
     }, { headers: { "Cache-Control": "private, no-store" } });
   } catch (error) { return uploadFailure(error, stage, kind); }

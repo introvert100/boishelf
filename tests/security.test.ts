@@ -13,6 +13,7 @@ import {
   type LaunchSettings,
 } from "../src/lib/payment-rules";
 import { detectUpload } from "../src/lib/admin-validation";
+import { signedResumableEndpoint, signedUploadHeaders } from "../src/lib/signed-upload";
 import type { User } from "@supabase/supabase-js";
 const user = {
   id: "reader",
@@ -23,6 +24,24 @@ const user = {
   email_confirmed_at: "2026-01-01",
   app_metadata: { provider: "email" },
 } as User;
+test("signed ebook uploads use Supabase's signed TUS route and public API key", () => {
+  assert.equal(
+    signedResumableEndpoint("https://example.supabase.co"),
+    "https://example.storage.supabase.co/storage/v1/upload/resumable/sign",
+  );
+  assert.equal(
+    signedResumableEndpoint("http://127.0.0.1:54321"),
+    "http://127.0.0.1:54321/storage/v1/upload/resumable/sign",
+  );
+  assert.equal(
+    signedResumableEndpoint("https://example.storage.supabase.co"),
+    "https://example.storage.supabase.co/storage/v1/upload/resumable/sign",
+  );
+  assert.deepEqual(signedUploadHeaders("public-key", "signed-token"), {
+    apikey: "public-key",
+    "x-signature": "signed-token",
+  });
+});
 test("only confirmed Gmail addresses are accepted", () => {
   assert.equal(isGmailUser(user), true);
   assert.equal(isGmailUser({ ...user, email: "reader@company.com" }), false);

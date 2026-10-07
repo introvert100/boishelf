@@ -1,5 +1,6 @@
 import { Upload } from "tus-js-client";
 import type { UploadKind } from "./admin-validation";
+import { signedUploadHeaders } from "./signed-upload";
 
 type EbookKind = Extract<UploadKind, "pdf" | "epub">;
 type UploadResult = { name: string; path: string; previewPages?: number; sourcePages?: number };
@@ -24,7 +25,7 @@ export async function uploadEbook(
     const transfer = new Upload(file, {
       endpoint: session.endpoint,
       retryDelays: [0, 3000, 5000, 10000, 20000],
-      headers: { "x-signature": session.token },
+      headers: signedUploadHeaders(process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!, session.token),
       metadata: {
         bucketName: "ebooks", objectName: session.path,
         contentType: kind === "pdf" ? "application/pdf" : "application/epub+zip",
@@ -48,7 +49,9 @@ export async function uploadEbook(
         } catch { /* Supabase may return an empty response. */ }
         const sizeFailure = status === 413 || /size|too.large|exceed/i.test(`${code} ${reason}`);
         const mimeFailure = status === 415 || /mime|content.type/i.test(`${code} ${reason}`);
-        const message = sizeFailure
+        const message = code === "AccessDenied"
+          ? "Supabase refused the signed upload. Reload the page and retry. If it still fails, check that this site uses the correct Supabase project key."
+          : sizeFailure
           ? "Supabase Storage rejected the file size. Check the global Storage limit and set the ebooks bucket limit to 50 MB."
           : mimeFailure
             ? "Supabase Storage rejected the file type. Allow application/pdf and application/epub+zip in the private ebooks bucket."
