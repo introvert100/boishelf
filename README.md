@@ -1,6 +1,6 @@
 # BoiShelf
 
-A Bangla-first PDF/EPUB store, built with Next.js, Supabase and SSLCOMMERZ. Includes an English interface, private downloads, owner administration, sandbox checkout and a Render free-pilot configuration.
+A Bangla-first PDF/EPUB store, built with Next.js and Supabase. Customers pay an eligible bKash business account manually; only the owner can approve a verified payment and unlock private downloads.
 
 ## Run locally
 
@@ -22,8 +22,8 @@ Copy `.env.example` to `.env.local` and follow [the deployment guide](docs/DEPLO
 - Supabase PostgreSQL schema and RLS policies for customers, books, orders and entitlements.
 - Private PDF/EPUB storage with purchase checks and 60-second signed download links.
 - `/admin` for the explicitly configured owner: draft/publish books, upload cover/PDF/EPUB files, set public PDF previews, archive or delete books, inspect orders and publish the owner's policy text.
-- SSLCOMMERZ initiation, IPN/return handling, validation, pending-order reconciliation and atomic/idempotent fulfillment.
-- Separate sandbox/live entitlements; real payments gated by launch settings and real content.
+- Manual bKash orders, transaction-ID claims, owner review and atomic/idempotent fulfillment. A buyer's claim never unlocks a book by itself.
+- Historical sandbox orders remain records, but only live entitlements unlock customer downloads.
 - Render Blueprint, GitHub CI, optional scheduled production health checks, and structured server error logs.
 
 ## Add a book
@@ -32,7 +32,7 @@ Supabase Free cannot hold a single 100 MB ebook; its limit is 50 MB per file. Ap
 
 Sign in with the Gmail address configured as `ADMIN_EMAIL`, then open `/admin` and choose **Add a book**. Enter both language versions, a lowercase URL slug such as `amar-boi`, and a price in BDT. The form points to any field that needs correction. Choose **Save as draft** before uploading files.
 
-The saved book shows separate controls for a cover image (PNG/JPG/WebP, up to 5 MB), PDF (up to 50 MB), and EPUB (up to 50 MB). Choosing a cover opens a crop window: drag or use the sliders to position it, inspect the shop-size preview, and save the selected area. PDF/EPUB files upload directly to private Supabase Storage in resumable chunks; BoiShelf confirms the saved book record before reporting success. Set the private `ebooks` bucket file-size limit to at least 50 MB. Upload either PDF or EPUB to make publishing possible. A non-sample book also needs a cover. The publishing checklist shows what is missing and the saved status stays visible after an unsuccessful attempt. Then select **Published** and save again. A sample checkbox only marks the book as a sample; for sandbox testing, save it as a sample and use **Create test PDF** to add a one-page original file, or upload your own PDF/EPUB. Uploading a new file of the same type replaces the active one; the previous private object remains available for rollback as described in [operations](docs/OPERATIONS.md).
+The saved book shows separate controls for a cover image (PNG/JPG/WebP, up to 5 MB), PDF (up to 50 MB), and EPUB (up to 50 MB). Choosing a cover opens a crop window: drag or use the sliders to position it, inspect the shop-size preview, and save the selected area. PDF/EPUB files upload directly to private Supabase Storage in resumable chunks; BoiShelf confirms the saved book record before reporting success. Set the private `ebooks` bucket file-size limit to at least 50 MB. Upload either PDF or EPUB to make publishing possible. A non-sample book also needs a cover. The publishing checklist shows what is missing and the saved status stays visible after an unsuccessful attempt. Then select **Published** and save again. A sample checkbox marks a book as a non-purchasable sample; use **Create test PDF** to add a one-page original file, or upload your own PDF/EPUB. Uploading a new file of the same type replaces the active one; the previous private object remains available for rollback as described in [operations](docs/OPERATIONS.md).
 
 Unfinished new-book details are saved only in this browser for the signed-in owner. After a refresh, choose **Restore draft** or **Discard draft**. Saving the book clears that browser draft.
 
@@ -50,10 +50,10 @@ npx playwright install chromium
 npm run test:e2e
 ```
 
-`npm test` runs pure security/payment tests and executes the actual SQL migrations against an isolated PostgreSQL-compatible PGlite instance, including real roles, RLS, stored procedures and transactional settlement. The database fixtures emulate Supabase's auth/storage schemas; they do not prove a hosted Supabase project's configuration. Browser checks use the unconfigured sample-catalogue mode; use a separate deployment for real email/SMTP/gateway acceptance tests.
+`npm test` executes security and database tests against an isolated PGlite instance, including RLS and manual-approval settlement. These fixtures do not prove your hosted Supabase configuration. Browser checks use the unconfigured sample catalogue; a real bKash transfer must be tested separately after the business account is ready.
 
 ## Launch status
 
-Local implementation is complete enough to connect and validate the external services. A production build alone does not mean the store is ready to accept real money. The live checklist and account requirements are in [DEPLOYMENT.md](docs/DEPLOYMENT.md); operations, reconciliation, backups and rollback are in [OPERATIONS.md](docs/OPERATIONS.md).
+The checkout is disabled by default. Apply the new migration, configure an eligible bKash Personal Retail or Merchant number, publish policies and real books, then follow [DEPLOYMENT.md](docs/DEPLOYMENT.md). Manual order review, refunds and rollback are in [OPERATIONS.md](docs/OPERATIONS.md).
 
-Third-party live integration tests require your Supabase project, Brevo SMTP account, Cloudflare Turnstile site and SSLCOMMERZ sandbox merchant account. Public deployment additionally requires a GitHub repository connected to Render. Final policies and commercial books must come from the owner.
+Live integration tests require your Supabase project, Brevo SMTP account, Cloudflare Turnstile site and eligible bKash business account. A displayed number does not verify a payment automatically. Customers wait for owner approval before downloading.

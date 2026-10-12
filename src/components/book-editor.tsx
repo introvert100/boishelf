@@ -130,11 +130,10 @@ function uploadFile(bookId: string, kind: UploadKind, file: File, onProgress: (p
 }
 
 export function BookEditor({
-  book, ownerId, sandbox, restored, onSaved, onUploaded, onPreviewSaved, onPagesDetected, onSuccess, onClose, onDraftChange,
+  book, ownerId, restored, onSaved, onUploaded, onPreviewSaved, onPagesDetected, onSuccess, onClose, onDraftChange,
 }: {
   book?: Book;
   ownerId: string;
-  sandbox: boolean;
   restored?: BookFormValues | null;
   onSaved: (id: string, values: BookFormValues) => void;
   onUploaded: (id: string, kind: UploadKind, name: string, path?: string) => void;
@@ -495,7 +494,7 @@ export function BookEditor({
       <p>{t("একটি PDF অথবা EPUB আপলোড করলেই প্রকাশ করা যাবে। একই ধরনের নতুন ফাইল পুরোনোটি বদলে দেবে।", "Upload either a PDF or an EPUB to publish. A new file of the same type replaces the current one.")}</p>
       {values.is_demo && <div className="sample-file-help">
         <p>{t("নমুনা চিহ্ন দিলেই ফাইল তৈরি হয় না। নিজের PDF/EPUB আপলোড করুন, অথবা পরীক্ষার জন্য একটি এক-পৃষ্ঠার PDF তৈরি করুন।", "Marking a book as a sample does not add an ebook. Upload your own PDF/EPUB, or create a one-page test PDF.")}</p>
-        {sandbox && !book.formats.includes("PDF") && uploads.pdf?.phase !== "done" && !book.published && <button type="button" className="button secondary" disabled={busy || !book.is_demo} onClick={() => void addSamplePdf()}>{t("পরীক্ষার PDF তৈরি করুন", "Create test PDF")}</button>}
+        {!book.formats.includes("PDF") && uploads.pdf?.phase !== "done" && !book.published && <button type="button" className="button secondary" disabled={busy || !book.is_demo} onClick={() => void addSamplePdf()}>{t("পরীক্ষার PDF তৈরি করুন", "Create test PDF")}</button>}
         {!book.is_demo && <p className="field-help">{t("প্রথমে নমুনা বই হিসেবে পরিবর্তন সংরক্ষণ করুন।", "Save the book as a sample first.")}</p>}
       </div>}
       <div className="upload-grid">{uploadKinds.map((kind) => {

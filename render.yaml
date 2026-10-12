@@ -27,21 +27,11 @@ services:
         sync: false
       - key: ADMIN_EMAIL
         sync: false
-      - key: PAYMENT_MODE
-        value: sandbox
-      - key: SSLCOMMERZ_SANDBOX_STORE_ID
+      - key: BKASH_RECEIVE_NUMBER
         sync: false
-      - key: SSLCOMMERZ_SANDBOX_STORE_PASSWORD
-        sync: false
-      - key: LIVE_PAYMENTS_ENABLED
+      - key: BKASH_BUSINESS_ACCOUNT_CONFIRMED
         value: "false"
-      - key: MERCHANT_APPROVED
-        value: "false"
-      - key: PAID_HOSTING_CONFIRMED
-        value: "false"
-      - key: LIVE_PAYMENT_TESTS_CONFIRMED
-        value: "false"
-      - key: LIVE_PAYMENT_TEST_MODE
+      - key: MANUAL_BKASH_ENABLED
         value: "false"
       - key: MONITOR_TOKEN
         generateValue: true

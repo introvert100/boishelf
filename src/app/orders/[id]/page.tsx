@@ -21,5 +21,10 @@ export default async function Page({
     .maybeSingle();
   if (error) throw error;
   if (!data) notFound();
-  return <OrderView initial={data} />;
+  const { data: claim, error: claimError } = await serviceClient()
+    .from("manual_payment_claims")
+    .select("id,order_id,transaction_id,sender_last4,status,rejection_reason,submitted_at,decided_at")
+    .eq("order_id", id).order("submitted_at", { ascending: false }).limit(1).maybeSingle();
+  if (claimError) throw claimError;
+  return <OrderView initial={data} initialClaim={claim} />;
 }

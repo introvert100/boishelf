@@ -35,7 +35,7 @@ import {
   Mail,
   KeyRound,
 } from "lucide-react";
-import type { Book, Locale, Viewer, Order, Policy } from "@/lib/types";
+import type { Book, Locale, Viewer, Order, Policy, ManualClaim } from "@/lib/types";
 import { categories } from "@/lib/demo";
 import { browserClient } from "@/lib/supabase-browser";
 import { isGmailUser } from "@/lib/security";
@@ -64,13 +64,11 @@ export function Shell({
   initialLocale,
   viewer,
   configured,
-  sandbox,
 }: {
   children: ReactNode;
   initialLocale: Locale;
   viewer: Viewer;
   configured: boolean;
-  sandbox: boolean;
 }) {
   const [locale, setLocale] = useState(initialLocale);
   const [menu, setMenu] = useState(false);
@@ -94,16 +92,6 @@ export function Shell({
       <a className="skip" href="#main">
         {t("মূল বিষয়বস্তুতে যান", "Skip to content")}
       </a>
-      {sandbox && (
-        <div className="pilot-bar">
-          <span className="pilot-dot" />
-          {t(
-            "পাইলট সংস্করণ · নমুনা বই ও পরীক্ষামূলক পেমেন্ট",
-            "PILOT STORE · SAMPLE BOOKS & TEST PAYMENTS",
-          )}
-          <span>{t("আসল টাকা কাটা হবে না", "No real charges")}</span>
-        </div>
-      )}
       <header className="header">
         <div className="container header-inner">
           <Link href="/" className="brand" aria-label="BoiShelf home">
@@ -214,13 +202,10 @@ export function Shell({
           </div>
           <div className="payment-brands">
             <small>
-              {t("SSLCOMMERZ-এর মাধ্যমে পেমেন্ট", "PAYMENTS VIA SSLCOMMERZ")}
+              {t("ম্যানুয়াল যাচাইয়ের পর bKash পেমেন্ট", "MANUALLY VERIFIED BKASH PAYMENTS")}
             </small>
             <div>
               <b className="bkash">bKash</b>
-              <b className="nagad">Nagad</b>
-              <b className="visa">VISA</b>
-              <b className="rocket">Rocket</b>
             </div>
           </div>
         </div>
@@ -383,11 +368,11 @@ export function Catalogue({ books }: { books: Book[] }) {
         <div>
           <Download />
           <span>
-            <b>{t("কেনার পরই ডাউনলোড", "Yours in a moment")}</b>
+            <b>{t("যাচাইয়ের পর ডাউনলোড", "Download after review")}</b>
             <small>
               {t(
-                "পেমেন্ট নিশ্চিত হলেই বই আপনার",
-                "Download after payment confirmation",
+                "মালিক পেমেন্ট যাচাই করলে বইটি পাবেন",
+                "The owner unlocks your book after verifying payment",
               )}
             </small>
           </span>
@@ -395,8 +380,8 @@ export function Catalogue({ books }: { books: Book[] }) {
         <div>
           <ShieldCheck />
           <span>
-            <b>{t("বিশ্বস্ত পেমেন্ট", "Familiar ways to pay")}</b>
-            <small>{t("bKash, Nagad ও কার্ড", "bKash, Nagad & cards")}</small>
+            <b>{t("bKash পেমেন্ট", "Pay with bKash")}</b>
+            <small>{t("লেনদেনটি মালিক যাচাই করবেন", "Every transfer is checked by the owner")}</small>
           </span>
         </div>
         <div>
@@ -627,24 +612,24 @@ export function BookDetail({ book }: { book: Book }) {
               )}
             </small>
           </div>
-          <Link className="button wide" href={`/checkout/${book.slug}`}>
+          {!book.is_demo && <Link className="button wide" href={`/checkout/${book.slug}`}>
             {t("এখনই কিনুন", "Buy this ebook")}
-          </Link>
+          </Link>}
           {!!book.preview_pages && <button type="button" className="button secondary wide" onClick={() => setPreviewOpen(true)}>
             {t(`প্রথম ${book.preview_pages} পৃষ্ঠা পড়ুন`, `Read ${book.preview_pages}-page preview`)}
           </button>}
           <p className="secure-note">
             <ShieldCheck size={16} />
             {t(
-              "SSLCOMMERZ-এর মাধ্যমে নিরাপদ চেকআউট",
-              "Secure checkout with SSLCOMMERZ",
+              "bKash পেমেন্ট যাচাইয়ের পর ডাউনলোড",
+              "Download after manual bKash payment verification",
             )}
           </p>
           {book.is_demo && (
             <div className="notice">
               {t(
-                "এটি একটি নমুনা বই। শুধু পরীক্ষামূলক পেমেন্টের জন্য।",
-                "This is a sample ebook for test purchases only.",
+                "এটি একটি নমুনা বই। এটি কেনা যাবে না।",
+                "This is a sample ebook and cannot be purchased.",
               )}
             </div>
           )}
@@ -919,12 +904,10 @@ export function Checkout({
   book,
   viewer,
   ready,
-  sandbox,
 }: {
   book: Book;
   viewer: Viewer;
   ready: boolean;
-  sandbox: boolean;
 }) {
   const { locale, t } = useLanguage();
   const [busy, setBusy] = useState(false);
@@ -933,16 +916,16 @@ export function Checkout({
     event.preventDefault();
     setBusy(true);
     setError("");
-    const data = Object.fromEntries(new FormData(event.currentTarget));
+    const data = new FormData(event.currentTarget);
     try {
       const res = await fetch("/api/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...data, bookId: book.id }),
+        body: JSON.stringify({ bookId: book.id, accepted: data.get("accepted") === "on" }),
       });
       const body = await res.json();
       if (!res.ok) throw new Error(body.error);
-      window.location.assign(body.url);
+      window.location.assign(`/orders/${body.orderId}`);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Please try again.");
       setBusy(false);
@@ -956,16 +939,11 @@ export function Checkout({
       <h1>{t("বইটি আপনার করে নিন", "Make it yours")}</h1>
       <div className="checkout-layout">
         <form onSubmit={submit} className="panel checkout-form">
-          <h2>{t("চেকআউট", "Checkout")}</h2>
-          {sandbox && (
-            <div className="notice">
-              {t(
-                "পরীক্ষামূলক পেমেন্ট। আসল টাকা বা আসল কার্ড ব্যবহার করবেন না।",
-                "Test checkout. Do not use real money or real card details.",
-              )}
-            </div>
-          )}
-          {!viewer ? (
+          <h2>{t("bKash চেকআউট", "bKash checkout")}</h2>
+          <p>{t("অর্ডার তৈরির পর bKash নম্বর ও রেফারেন্স দেখানো হবে। টাকা পাঠানোর পর ট্রানজ্যাকশন আইডি দিন। মালিক যাচাই না করা পর্যন্ত ডাউনলোড চালু হবে না।", "After creating the order, you will see the bKash number and reference. Submit the transaction ID after paying. Downloads unlock only after the owner verifies the transfer.")}</p>
+          {book.is_demo ? (
+            <p className="notice">{t("নমুনা বই কেনা যাবে না।", "Sample books cannot be purchased.")}</p>
+          ) : !viewer ? (
             <>
               <p>
                 {t(
@@ -983,47 +961,8 @@ export function Checkout({
           ) : (
             <>
               <label>
-                {t("আপনার নাম", "Your name")}
-                <input
-                  name="name"
-                  required
-                  maxLength={80}
-                  defaultValue={viewer.name}
-                  autoComplete="name"
-                />
-              </label>
-              <label>
                 {t("Gmail ঠিকানা", "Gmail address")}
                 <input value={viewer.email} readOnly type="email" />
-              </label>
-              <label>
-                {t("মোবাইল নম্বর", "Mobile number")}
-                <input
-                  name="phone"
-                  type="tel"
-                  required
-                  pattern="(?:\+?88)?01[3-9][0-9]{8}"
-                  placeholder="01XXXXXXXXX"
-                  autoComplete="tel"
-                />
-              </label>
-              <label>
-                {t("বিলিং ঠিকানা", "Billing address")}
-                <input
-                  name="address"
-                  required
-                  maxLength={160}
-                  autoComplete="street-address"
-                />
-              </label>
-              <label>
-                {t("শহর", "City")}
-                <input
-                  name="city"
-                  required
-                  maxLength={60}
-                  autoComplete="address-level2"
-                />
               </label>
               <label className="checkbox">
                 <input type="checkbox" name="accepted" required />
@@ -1034,14 +973,13 @@ export function Checkout({
                   <Link href="/policies/refund">
                     {t("রিফান্ড নীতি", "refund policy")}
                   </Link>
-                  {sandbox && t(" (পাইলট পরীক্ষা)", " (pilot test)")}
                 </span>
               </label>
               {!ready && (
                 <p className="notice">
                   {t(
-                    "পেমেন্ট এখনো চালু হয়নি। পরে আবার চেষ্টা করুন।",
-                    "Payments are not connected yet. Please check back soon.",
+                    "bKash চেকআউট এখনো চালু হয়নি। পরে আবার চেষ্টা করুন।",
+                    "bKash checkout is not available yet. Please check back soon.",
                   )}
                 </p>
               )}
@@ -1056,15 +994,15 @@ export function Checkout({
                 ) : (
                   <LockKeyhole size={17} />
                 )}{" "}
-                {t("পেমেন্টে যান", "Continue to payment")}
+                {t("অর্ডার তৈরি করুন", "Create order")}
               </button>
             </>
           )}
           <p className="secure-note">
             <ShieldCheck size={15} />
             {t(
-              "পেমেন্টের তথ্য স্টোরে সংরক্ষণ করা হয় না।",
-              "Payment details are handled by SSLCOMMERZ.",
+              "আপনার bKash PIN বা OTP কখনো এখানে লিখবেন না।",
+              "Never enter your bKash PIN or OTP on this site.",
             )}
           </p>
         </form>
@@ -1095,11 +1033,9 @@ export function Checkout({
 export function LibraryView({
   books,
   orders,
-  sandbox,
 }: {
   books: Book[];
   orders: Order[];
-  sandbox: boolean;
 }) {
   const { locale, t } = useLanguage();
   const [error, setError] = useState("");
@@ -1133,14 +1069,6 @@ export function LibraryView({
           "All your books, right here. Your next chapter is waiting.",
         )}
       </p>
-      {sandbox && (
-        <div className="notice">
-          {t(
-            "এখানে শুধু পরীক্ষামূলক কেনাকাটা দেখানো হচ্ছে।",
-            "Showing sandbox purchases only.",
-          )}
-        </div>
-      )}
       {error && (
         <p className="notice error" role="alert">
           {error}
@@ -1237,21 +1165,26 @@ export function LibraryView({
   );
 }
 export function statusLabel(status: string, locale: Locale) {
-  const map: Record<string, string> = {
+  const bn: Record<string, string> = {
     paid: "সম্পন্ন",
     pending: "অপেক্ষমাণ",
     failed: "ব্যর্থ",
     cancelled: "বাতিল",
     review: "যাচাই চলছে",
     refunded: "ফেরত দেওয়া হয়েছে",
+    rejected: "দাবি গ্রহণ করা হয়নি",
   };
-  return locale === "bn"
-    ? map[status] || status
-    : status.charAt(0).toUpperCase() + status.slice(1);
+  const en: Record<string, string> = {
+    paid: "Paid", pending: "Awaiting payment", failed: "Failed",
+    cancelled: "Cancelled", review: "Under review", refunded: "Refunded",
+    rejected: "Claim rejected",
+  };
+  return (locale === "bn" ? bn : en)[status] || status;
 }
-export function OrderView({ initial }: { initial: Order }) {
+export function OrderView({ initial, initialClaim }: { initial: Order; initialClaim: ManualClaim | null }) {
   const { locale, t } = useLanguage();
   const [order, setOrder] = useState(initial);
+  const [claim, setClaim] = useState(initialClaim);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   async function refresh() {
@@ -1261,25 +1194,34 @@ export function OrderView({ initial }: { initial: Order }) {
       const res = await fetch(`/api/orders/${order.id}`, { method: "POST" });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
-      setOrder(data);
+      setOrder(data.order);
+      setClaim(data.claim);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Please retry.");
     } finally {
       setBusy(false);
     }
   }
-  useEffect(() => {
-    if (initial.status !== "pending") return;
-    let count = 0;
-    const timer = setInterval(() => {
-      if (++count > 4) {
-        clearInterval(timer);
-        return;
-      }
-      void refresh();
-    }, 15000);
-    return () => clearInterval(timer);
-  }, [initial.id]);
+  async function submitClaim(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setBusy(true);
+    setError("");
+    const values = new FormData(event.currentTarget);
+    try {
+      const response = await fetch(`/api/orders/${order.id}/claim`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ transactionId: values.get("transactionId"), senderLast4: values.get("senderLast4") }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error);
+      setOrder((current) => ({ ...current, status: "review" }));
+      await refresh();
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : "Please retry.");
+    } finally {
+      setBusy(false);
+    }
+  }
   return (
     <div className="container auth-page">
       <div className="auth-card order-status">
@@ -1293,22 +1235,36 @@ export function OrderView({ initial }: { initial: Order }) {
         <p>
           <Price paisa={order.amount_paisa} />
         </p>
-        <p>
-          {order.status === "paid"
-            ? t(
-                "আপনার বই এখন লাইব্রেরিতে। পড়া শুরু করুন!",
-                "Your book is in your library. Happy reading!",
-              )
-            : order.status === "review"
-              ? t(
-                  "পেমেন্টটি পর্যালোচনা করা হচ্ছে। সহায়তার জন্য স্টোরে যোগাযোগ করুন।",
-                  "This payment needs review. Please contact the store for help.",
-                )
-              : t(
-                  "পেমেন্টের অবস্থা নিশ্চিত করতে নিচের বোতাম ব্যবহার করুন।",
-                  "Check the latest payment status below.",
-                )}
-        </p>
+        <p>{order.status === "paid"
+          ? t("আপনার বই এখন লাইব্রেরিতে। পড়া শুরু করুন!", "Your book is in your library. Happy reading!")
+          : order.status === "review"
+            ? t("লেনদেনের তথ্য জমা হয়েছে। মালিক bKash-এ টাকা পাওয়া যাচাই করছেন। যাচাই শেষ না হওয়া পর্যন্ত ডাউনলোড বন্ধ থাকবে।", "Your claim was submitted. The owner must verify the transfer in bKash before downloads unlock.")
+            : order.status === "rejected"
+              ? t("আপনার দাবি গ্রহণ করা হয়নি। নিচের কারণ দেখুন এবং সঠিক তথ্য দিয়ে আবার জমা দিন।", "Your claim was rejected. Read the reason below and resubmit the correct details.")
+              : t("প্রথমে bKash-এ টাকা পাঠান, তারপর লেনদেনের আইডি জমা দিন।", "Pay in bKash first, then submit your transaction ID.")}</p>
+        {order.payment_method === "bkash_manual" && (order.status === "pending" || order.status === "rejected") && (
+          <div className="notice manual-payment">
+            <h2>{t("bKash-এ পেমেন্ট করুন", "Pay with bKash")}</h2>
+            <p>{t("গ্রহণকারীর নম্বর", "Receiving number")}: <strong>{order.manual_receive_number}</strong></p>
+            <p>{t("ঠিক এই পরিমাণ পাঠান", "Send this exact amount")}: <strong><Price paisa={order.amount_paisa} /></strong></p>
+            <p>{t("সম্ভব হলে bKash রেফারেন্সে এটি লিখুন", "Use this payment reference if bKash allows it")}: <strong>{order.tran_id}</strong></p>
+            <p>{t("bKash অ্যাপ বা USSD-এ পেমেন্ট সম্পন্ন করুন। শুধু আইডি জমা দিলে বই খুলবে না। আপনার PIN বা OTP এখানে দেবেন না।", "Complete the payment in bKash. Submitting an ID alone does not unlock the book. Never enter your bKash PIN or OTP here.")}</p>
+          </div>
+        )}
+        {claim?.status === "rejected" && claim.rejection_reason && (
+          <p className="notice error" role="alert">{t("যাচাইয়ের কারণ: ", "Review reason: ")}{claim.rejection_reason}</p>
+        )}
+        {order.payment_method === "bkash_manual" && (order.status === "pending" || order.status === "rejected") && (
+          <form className="admin-form" onSubmit={submitClaim}>
+            <label>{t("bKash ট্রানজ্যাকশন আইডি", "bKash transaction ID")}
+              <input name="transactionId" required minLength={6} maxLength={30} pattern="[A-Za-z0-9]{6,30}" autoCapitalize="characters" placeholder="e.g. A1B2C3D4" />
+            </label>
+            <label>{t("প্রেরকের bKash নম্বরের শেষ ৪ সংখ্যা", "Last 4 digits of sender's bKash number")}
+              <input name="senderLast4" required inputMode="numeric" pattern="[0-9]{4}" maxLength={4} placeholder="1234" />
+            </label>
+            <button className="button wide" disabled={busy}>{t("যাচাইয়ের জন্য জমা দিন", "Submit for review")}</button>
+          </form>
+        )}
         {error && <p className="notice error">{error}</p>}
         {order.status !== "paid" && (
           <button
@@ -1317,13 +1273,13 @@ export function OrderView({ initial }: { initial: Order }) {
             onClick={refresh}
           >
             {busy && <LoaderCircle className="spin" size={17} />}{" "}
-            {t("আবার যাচাই করুন", "Check payment status")}
+            {t("অবস্থা হালনাগাদ করুন", "Refresh order status")}
           </button>
         )}
         <Link className="button wide" href="/library">
           {t("লাইব্রেরিতে যান", "Go to my library")}
         </Link>
-        <small>{order.tran_id}</small>
+        <small>{t("অর্ডার রেফারেন্স", "Order reference")}: {order.tran_id}</small>
       </div>
     </div>
   );
@@ -1388,15 +1344,15 @@ export function HowItWorks() {
             ShieldCheck,
             "Gmail দিয়ে লগইন ও পেমেন্ট",
             "Sign in and check out",
-            "Gmail দিয়ে লগইন করে SSLCOMMERZ-এ পছন্দের মাধ্যমে পেমেন্ট করুন।",
-            "Use your Gmail account, then pay through SSLCOMMERZ with an available payment method.",
+            "Gmail দিয়ে লগইন করে bKash-এ টাকা পাঠান, তারপর লেনদেনের আইডি জমা দিন।",
+            "Sign in with Gmail, pay through bKash, then submit your transaction ID.",
           ],
           [
             Download,
             "ডাউনলোড করে পড়ুন",
             "Download and enjoy",
-            "পেমেন্ট নিশ্চিত হলে লাইব্রেরি থেকে PDF বা EPUB নামিয়ে নিন।",
-            "Once payment is confirmed, download your PDF or EPUB from My library.",
+            "মালিক পেমেন্ট যাচাই করলে লাইব্রেরি থেকে PDF বা EPUB নামিয়ে নিন।",
+            "After the owner verifies payment, download your PDF or EPUB from My library.",
           ],
         ].map(([Icon, bn, en, dbn, den], i) => {
           const C = Icon as typeof BookOpen;

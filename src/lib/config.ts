@@ -17,19 +17,14 @@ export function appUrl() {
     throw new Error("HTTPS required");
   return url.origin;
 }
-export function paymentMode(): "sandbox" | "live" {
-  const mode = process.env.PAYMENT_MODE || "sandbox";
-  if (mode !== "sandbox" && mode !== "live")
-    throw new Error("Invalid PAYMENT_MODE");
-  return mode;
-}
 export function ownerEmail() {
   return (process.env.ADMIN_EMAIL || "").trim().toLowerCase();
 }
-export function paymentCredentials(mode = paymentMode()) {
-  const prefix = mode === "live" ? "SSLCOMMERZ_LIVE" : "SSLCOMMERZ_SANDBOX";
-  const id = process.env[`${prefix}_STORE_ID`];
-  const password = process.env[`${prefix}_STORE_PASSWORD`];
-  if (!id || !password) throw new Error("Payment service is not configured");
-  return { id, password };
+export function bkashNumber() {
+  const number = (process.env.BKASH_RECEIVE_NUMBER || "").trim();
+  return /^01[3-9]\d{8}$/.test(number) ? number : null;
+}
+export function manualCheckoutEnabled() {
+  return process.env.MANUAL_BKASH_ENABLED === "true" &&
+    process.env.BKASH_BUSINESS_ACCOUNT_CONFIRMED === "true";
 }

@@ -1,7 +1,7 @@
 export type Locale = "bn" | "en";
 export type PaymentMode = "sandbox" | "live";
 export type OrderStatus =
-  "pending" | "paid" | "failed" | "cancelled" | "review" | "refunded";
+  "pending" | "paid" | "failed" | "cancelled" | "review" | "refunded" | "rejected";
 export type Book = {
   id: string;
   slug: string;
@@ -36,10 +36,23 @@ export type Order = {
   book_title: string;
   amount_paisa: number;
   mode: PaymentMode;
+  payment_method: "sslcommerz" | "bkash_manual";
+  manual_receive_number: string | null;
   status: OrderStatus;
   tran_id: string;
   created_at: string;
 };
+export type ManualClaim = {
+  id: string;
+  order_id: string;
+  transaction_id: string;
+  sender_last4: string | null;
+  status: "submitted" | "approved" | "rejected";
+  rejection_reason: string | null;
+  submitted_at: string;
+  decided_at: string | null;
+};
+export type ReviewClaim = ManualClaim & { order: Order; customerEmail: string };
 export type Policy = {
   slug: string;
   title_en: string;

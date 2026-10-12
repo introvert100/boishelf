@@ -1,6 +1,5 @@
 import { z } from "zod";
 import { requireOwner } from "@/lib/auth";
-import { paymentMode } from "@/lib/config";
 import { apiError, AppError, checkOrigin, jsonBody, rateLimit } from "@/lib/http";
 import { samplePdf } from "@/lib/sample-pdf";
 import { serviceClient } from "@/lib/supabase";
@@ -11,7 +10,6 @@ export async function POST(request: Request) {
     checkOrigin(request);
     const owner = await requireOwner();
     await rateLimit(`sample-pdf:${owner.id}`, 10, 60);
-    if (paymentMode() !== "sandbox") throw new AppError(403, "Test files are available only in sandbox mode.");
     const { bookId } = z.object({ bookId: z.uuid() }).parse(await jsonBody(request));
     const db = serviceClient();
     const { data: book, error: lookup } = await db.from("books")

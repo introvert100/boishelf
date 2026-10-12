@@ -52,14 +52,14 @@ test("PostgreSQL migration, access policies and atomic payment transitions", asy
     amount_paisa: number;
     reused: boolean;
   };
-  await t.test("all ten public tables have RLS", async () => {
+  await t.test("all twelve public tables have RLS", async () => {
     const { rows } = await db.query<{
       relname: string;
       relrowsecurity: boolean;
     }>(
       "select relname,relrowsecurity from pg_class join pg_namespace on pg_namespace.oid=relnamespace where nspname='public' and relkind='r'",
     );
-    assert.equal(rows.length, 10);
+    assert.equal(rows.length, 12);
     assert.ok(rows.every((r) => r.relrowsecurity));
   });
   await t.test("free-tier ebook bucket accepts 50 MB files and remains private", async () => {
@@ -467,6 +467,47 @@ test("PostgreSQL migration, access policies and atomic payment transitions", asy
     assert.deepEqual(jobs.rows.map((row) => row.object_path).sort(),
       ["private/cover.png", "private/ebook.epub", "private/sample-excerpt.pdf", "private/sample-source.pdf", `${id}/old-replaced.pdf`].sort());
     await assert.rejects(() => db.query("select delete_unsold_book($1)", [id]), /book_not_found/);
+  });
+  await t.test("manual bKash claims never unlock books without owner approval", async () => {
+    const manualBook = "99999999-9999-4999-8999-999999999999";
+    await db.query(`insert into books(id,slug,title_bn,title_en,author_bn,author_en,description_bn,description_en,category,price_paisa,pages,published)
+      values($1,'manual-book','বই','Manual book','লেখক','Author','বিবরণ','Description','fiction',34900,50,true)`, [manualBook]);
+    await db.query("insert into book_formats(book_id,format,storage_path,original_name,size_bytes) values($1,'epub','private/manual.epub','manual.epub',100)", [manualBook]);
+    await assert.rejects(asRole("authenticated", reader,
+      () => db.query("select create_manual_order($1,$2,$3)", [reader, manualBook, "01712345678"])));
+    const created = (await db.query<{ v: { id: string; amount_paisa: number; reused: boolean; mode: string; payment_method: string; manual_receive_number: string } }>(
+      "select create_manual_order($1,$2,$3) as v", [reader, manualBook, "01712345678"])).rows[0].v;
+    assert.equal(created.amount_paisa, 34900);
+    assert.equal(created.mode, "live");
+    assert.equal(created.payment_method, "bkash_manual");
+    assert.equal(created.manual_receive_number, "01712345678");
+    assert.equal((await db.query("select * from payment_attempts where order_id=$1", [created.id])).rows.length, 0);
+    const retry = (await db.query<{ v: { id: string; reused: boolean; manual_receive_number: string } }>(
+      "select create_manual_order($1,$2,$3) as v", [reader, manualBook, "01812345678"])).rows[0].v;
+    assert.equal(retry.id, created.id);
+    assert.equal(retry.reused, true);
+    assert.equal(retry.manual_receive_number, "01712345678");
+    await assert.rejects(db.query("select submit_manual_claim($1,$2,$3,$4)", [other, created.id, "ABC123456", "1234"]), /order_missing/);
+    await assert.rejects(db.query("select submit_manual_claim($1,$2,$3,$4)", [reader, created.id, "bad!", "1234"]), /invalid_transaction/);
+    await db.query("select submit_manual_claim($1,$2,$3,$4)", [reader, created.id, "abc123456", "1234"]);
+    const firstClaim = (await db.query<{ id: string }>("select id from manual_payment_claims where order_id=$1", [created.id])).rows[0].id;
+    assert.equal((await db.query("select * from entitlements where book_id=$1 and mode='live'", [manualBook])).rows.length, 0);
+    await assert.rejects(asRole("authenticated", reader,
+      () => db.query("select * from manual_payment_claims")));
+    await assert.rejects(asRole("authenticated", reader,
+      () => db.query("select approve_manual_claim($1,$2,$3)", [created.id, firstClaim, reader])));
+    const otherOrder = (await db.query<{ v: { id: string } }>(
+      "select create_manual_order($1,$2,$3) as v", [other, manualBook, "01712345678"])).rows[0].v;
+    await assert.rejects(db.query("select submit_manual_claim($1,$2,$3,$4)", [other, otherOrder.id, "ABC123456", "5678"]));
+    await db.query("select reject_manual_claim($1,$2,$3,$4)", [created.id, firstClaim, other, "Transfer not found"]);
+    assert.equal((await db.query("select * from entitlements where book_id=$1 and mode='live'", [manualBook])).rows.length, 0);
+    await db.query("select submit_manual_claim($1,$2,$3,$4)", [reader, created.id, "ABC123456", "5678"]);
+    const secondClaim = (await db.query<{ id: string }>("select id from manual_payment_claims where order_id=$1 and status='submitted'", [created.id])).rows[0].id;
+    await db.query("select approve_manual_claim($1,$2,$3)", [created.id, secondClaim, other]);
+    await db.query("select approve_manual_claim($1,$2,$3)", [created.id, secondClaim, other]);
+    assert.equal((await db.query("select * from entitlements where book_id=$1 and mode='live'", [manualBook])).rows.length, 1);
+    await assert.rejects(db.query("select reject_manual_claim($1,$2,$3,$4)", [created.id, secondClaim, other, "Trying to downgrade"]), /claim_not_pending/);
+    await assert.rejects(db.query("select create_manual_order($1,$2,$3)", [reader, manualBook, "01712345678"]), /already_owned/);
   });
   await db.close();
 });

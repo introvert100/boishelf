@@ -1,6 +1,5 @@
 import { z } from "zod";
 import { requireUser } from "@/lib/auth";
-import { paymentMode } from "@/lib/config";
 import { serviceClient } from "@/lib/supabase";
 import { AppError, apiError, checkOrigin, rateLimit } from "@/lib/http";
 export async function POST(
@@ -20,7 +19,7 @@ export async function POST(
       .select("id")
       .eq("user_id", user.id)
       .eq("book_id", bookId)
-      .eq("mode", paymentMode())
+      .eq("mode", "live")
       .is("revoked_at", null)
       .maybeSingle();
     if (a) throw a;

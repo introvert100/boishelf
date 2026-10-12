@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { cookies } from "next/headers";
 import { Shell } from "@/components/store";
 import { viewer } from "@/lib/auth";
-import { hasSupabase, paymentMode } from "@/lib/config";
+import { hasSupabase } from "@/lib/config";
 import "./globals.css";
 // Fontsource packages provide local font files; no browser request to Google Fonts.
 export const metadata: Metadata = {
@@ -28,7 +28,6 @@ export default async function RootLayout({
           initialLocale={locale}
           viewer={await viewer()}
           configured={hasSupabase()}
-          sandbox={paymentMode() === "sandbox"}
         >
           {children}
         </Shell>

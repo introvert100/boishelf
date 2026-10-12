@@ -14,22 +14,22 @@ import { useLanguage, Price, statusLabel } from "./store";
 import { BookEditor } from "./book-editor";
 import { SuccessToast, type ToastMessage } from "./success-toast";
 import { draftKey, parseBookDraft, type BookFormValues } from "@/lib/book-draft";
-import type { Book, Order, Policy } from "@/lib/types";
+import type { Book, Order, Policy, ReviewClaim } from "@/lib/types";
 type Gate = { key: string; label: string; passed: boolean };
 export function Admin({
   books,
   orders,
+  claims,
   policies,
   gates,
-  mode,
   ownerId,
   cleanupPending,
 }: {
   books: Book[];
   orders: Order[];
+  claims: ReviewClaim[];
   policies: Policy[];
   gates: Gate[];
-  mode: string;
   ownerId: string;
   cleanupPending: number;
 }) {
@@ -48,6 +48,8 @@ export function Admin({
   const [archiveOverrides, setArchiveOverrides] = useState<Record<string, string | null>>({});
   const [deleteTarget, setDeleteTarget] = useState<Book | null>(null);
   const [pendingCleanup, setPendingCleanup] = useState(cleanupPending);
+  const [resolvedClaims, setResolvedClaims] = useState<string[]>([]);
+  const [rejectReasons, setRejectReasons] = useState<Record<string, string>>({});
   const deleteDialog = useRef<HTMLDialogElement>(null);
   const showToast = useCallback((message: string) => setToast({ id: Date.now(), text: message }), []);
   const dismissToast = useCallback(() => setToast(null), []);
@@ -142,6 +144,27 @@ export function Admin({
     } catch (failure) { setError((failure as Error).message); }
     finally { setBusy(false); }
   }
+  async function reviewClaim(claim: ReviewClaim, action: "approve" | "reject") {
+    if (busy) return;
+    const reason = rejectReasons[claim.id]?.trim() || "";
+    if (action === "reject" && (reason.length < 5 || reason.length > 300)) {
+      setError(t("প্রত্যাখ্যানের কারণ ৫–৩০০ অক্ষরে লিখুন।", "Enter a rejection reason of 5–300 characters."));
+      return;
+    }
+    if (action === "approve" && !window.confirm(t("আপনি কি bKash-এ প্রাপক, পরিমাণ, ট্রানজ্যাকশন আইডি এবং থাকলে রেফারেন্স মিলিয়ে দেখেছেন? অনুমোদন করলে বইটি ডাউনলোড করা যাবে।", "Have you verified the recipient, amount, transaction ID and reference if present in your bKash account? Approval immediately unlocks the book."))) return;
+    setBusy(true); setError("");
+    try {
+      await send(`/api/admin/orders/${claim.order_id}/review`, {
+        action, claimId: claim.id, ...(action === "reject" ? { reason } : {}),
+      });
+      setResolvedClaims((current) => [...current, claim.id]);
+      showToast(action === "approve"
+        ? t("পেমেন্ট অনুমোদিত। ক্রেতা এখন বই ডাউনলোড করতে পারবেন।", "Payment approved. The buyer can now download the book.")
+        : t("দাবি প্রত্যাখ্যান করা হয়েছে। ক্রেতা কারণ দেখে আবার জমা দিতে পারবেন।", "Claim rejected. The buyer can see the reason and resubmit."));
+      router.refresh();
+    } catch (failure) { setError((failure as Error).message); }
+    finally { setBusy(false); }
+  }
   return (
     <div className="container page">
       <div className="admin-heading">
@@ -177,21 +200,21 @@ export function Admin({
           <span>{t("ক্যাটালগে বই", "Books in catalogue")}</span>
         </div>
         <div className="panel">
-          <strong>{orders.filter((o) => o.status === "paid").length}</strong>
-          <span>{t("সাম্প্রতিক সম্পন্ন অর্ডার", "Recent paid orders")}</span>
+          <strong>{claims.filter((claim) => !resolvedClaims.includes(claim.id)).length}</strong>
+          <span>{t("যাচাইয়ের অপেক্ষায়", "Payments to review")}</span>
         </div>
         <div className="panel">
           <strong>
-            {mode === "sandbox" ? t("পরীক্ষা", "Sandbox") : "Live"}
+            bKash
           </strong>
-          <span>{t("পেমেন্ট পরিবেশ", "Payment environment")}</span>
+          <span>{t("ম্যানুয়াল পেমেন্ট", "Manual payment")}</span>
         </div>
       </div>
       <div className="admin-tabs" role="group" aria-label="Admin sections">
         {[
           ["books", "বই", "Books"],
           ["archived", "আর্কাইভ", "Archived"],
-          ["orders", "অর্ডার", "Orders"],
+          ["orders", `অর্ডার (${claims.filter((claim) => !resolvedClaims.includes(claim.id)).length})`, `Orders (${claims.filter((claim) => !resolvedClaims.includes(claim.id)).length})`],
           ["policies", "নীতিমালা", "Policies"],
           ["launch", "প্রকাশের প্রস্তুতি", "Launch readiness"],
         ].map(([id, bn, en]) => (
@@ -245,7 +268,6 @@ export function Admin({
             key={editing}
             book={editing === "new" ? undefined : recentBook?.id === editing ? recentBook : books.find((book) => book.id === editing)}
             ownerId={ownerId}
-            sandbox={mode === "sandbox"}
             restored={editing === "new" ? restoredDraft : null}
             onClose={() => { setEditing(null); setRestoredDraft(null); }}
             onDraftChange={setSavedDraft}
@@ -350,17 +372,41 @@ export function Admin({
         <>
           <p>
             {t(
-              "সর্বশেষ ২০০টি অর্ডার। পরীক্ষামূলক ও আসল অর্ডার আলাদাভাবে চিহ্নিত।",
-              "Latest 200 orders. Test and live orders are labelled separately.",
+              "bKash অ্যাপে প্রাপক নম্বর, পরিমাণ, ট্রানজ্যাকশন আইডি এবং থাকলে রেফারেন্স মিলিয়ে তবেই অনুমোদন করুন। শুধু ক্রেতার দাবির উপর নির্ভর করবেন না।",
+              "Check recipient, amount, transaction ID and reference if present in your bKash account before approving. Never rely on a buyer's claim alone.",
             )}
           </p>
+          <h2>{t("যাচাইয়ের সারি", "Review queue")}</h2>
+          {claims.length === 100 && <p className="notice">{t("প্রাচীনতম ১০০টি দাবি দেখানো হচ্ছে। এগুলো যাচাই করলে পরের দাবিগুলো দেখা যাবে।", "Showing the oldest 100 claims. Resolve these to see later submissions.")}</p>}
+          {claims.filter((claim) => !resolvedClaims.includes(claim.id)).length === 0
+            ? <p className="notice">{t("নতুন কোনো দাবি নেই।", "No claims awaiting review.")}</p>
+            : <div className="review-queue">{claims.filter((claim) => !resolvedClaims.includes(claim.id)).map((claim) => (
+              <article className="panel" key={claim.id}>
+                <h3>{claim.order.book_title}</h3>
+                <p>{t("ক্রেতা", "Customer")}: {claim.customerEmail}</p>
+                <p>{t("পরিমাণ", "Amount")}: <Price paisa={claim.order.amount_paisa} /> · {t("রেফারেন্স", "Reference")}: {claim.order.tran_id}</p>
+                <p>{t("প্রাপক", "Recipient")}: {claim.order.manual_receive_number} · {t("ট্রানজ্যাকশন আইডি", "Transaction ID")}: <strong>{claim.transaction_id}</strong></p>
+                <p>{t("প্রেরকের নম্বরের শেষ ৪ সংখ্যা", "Sender number ends in")}: {claim.sender_last4 || "—"}</p>
+                <p>{t("জমার সময়", "Submitted")}: {new Date(claim.submitted_at).toLocaleString(locale === "bn" ? "bn-BD" : "en-GB")}</p>
+                <div className="form-actions">
+                  <button type="button" className="button" disabled={busy} onClick={() => void reviewClaim(claim, "approve")}>{t("যাচাই করে অনুমোদন", "Verified — approve")}</button>
+                </div>
+                <label>{t("প্রত্যাখ্যানের কারণ", "Reason for rejection")}
+                  <input value={rejectReasons[claim.id] || ""} maxLength={300}
+                    onChange={(event) => setRejectReasons((current) => ({ ...current, [claim.id]: event.target.value }))}
+                    placeholder={t("যেমন: টাকা পাওয়া যায়নি", "For example: Transfer not found")} />
+                </label>
+                <button type="button" className="button secondary" disabled={busy} onClick={() => void reviewClaim(claim, "reject")}>{t("দাবি প্রত্যাখ্যান", "Reject claim")}</button>
+              </article>
+            ))}</div>}
+          <h2>{t("সাম্প্রতিক অর্ডার", "Recent orders")}</h2>
           <div className="table-wrap">
             <table>
               <thead>
                 <tr>
                   <th>Reference</th>
                   <th>Book</th>
-                  <th>Mode</th>
+                  <th>Method</th>
                   <th>Amount</th>
                   <th>Status</th>
                   <th>Date</th>
@@ -371,7 +417,7 @@ export function Admin({
                   <tr key={o.id}>
                     <td>{o.tran_id}</td>
                     <td>{o.book_title}</td>
-                    <td>{o.mode}</td>
+                    <td>{o.payment_method === "bkash_manual" ? "bKash" : "Legacy test"}</td>
                     <td>
                       <Price paisa={o.amount_paisa} />
                     </td>

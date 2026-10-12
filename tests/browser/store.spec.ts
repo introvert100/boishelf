@@ -10,16 +10,19 @@ test("catalogue, language, filters and book details work", async ({ page }) => {
   await page.getByRole("textbox", { name: "Search books" }).fill("quiet focus");
   await expect(page.locator(".book-card")).toHaveCount(1);
   await page.getByRole("link", { name: "The Power of Quiet Focus", exact: true }).click();
+  await expect(page).toHaveURL(/\/books\/quiet-focus/, { timeout: 15000 });
   await expect(
     page.getByRole("heading", { level: 1, name: "The Power of Quiet Focus" }),
   ).toBeVisible();
-  await page.getByRole("link", { name: "Buy this ebook" }).click();
+  await expect(page.getByRole("link", { name: "Buy this ebook" })).toHaveCount(0);
+  await page.goto("/checkout/quiet-focus");
   await expect(
     page.getByRole("heading", { name: "Make it yours" }),
   ).toBeVisible();
   await expect(
-    page.getByText("Test checkout. Do not use real money"),
+    page.getByRole("heading", { name: "bKash checkout" }),
   ).toBeVisible();
+  await expect(page.getByText("Sample books cannot be purchased.")).toBeVisible();
 });
 test("search empty state and category reset", async ({ page }) => {
   await page.goto("/", { waitUntil: "domcontentloaded" });
@@ -86,6 +89,12 @@ test("unconfigured authentication and admin routes stay closed", async ({
   })).status()).toBe(401);
   expect((await request.post(`/api/admin/upload/finish`, {
     headers: { Origin: "http://localhost:3000" }, data: { ticket: "invalid" },
+  })).status()).toBe(401);
+  expect((await request.post(`/api/admin/orders/${id}/review`, {
+    headers: { Origin: "http://localhost:3000" }, data: { action: "approve", claimId: id },
+  })).status()).toBe(401);
+  expect((await request.post(`/api/orders/${id}/claim`, {
+    headers: { Origin: "http://localhost:3000" }, data: { transactionId: "ABC123456", senderLast4: "1234" },
   })).status()).toBe(401);
   expect((await request.get(`/api/previews/${id}`)).status()).toBe(503);
   expect(

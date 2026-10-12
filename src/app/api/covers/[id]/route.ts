@@ -1,6 +1,5 @@
 import { serviceClient } from "@/lib/supabase";
 import { currentUser, isOwner } from "@/lib/auth";
-import { paymentMode } from "@/lib/config";
 import { z } from "zod";
 import { AppError, apiError } from "@/lib/http";
 export async function GET(
@@ -26,7 +25,7 @@ export async function GET(
           .select("id")
           .eq("book_id", id)
           .eq("user_id", user.id)
-          .eq("mode", paymentMode())
+          .eq("mode", "live")
           .is("revoked_at", null)
           .maybeSingle();
         if (!access) throw new AppError(404, "Cover not found.");

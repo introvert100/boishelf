@@ -1,6 +1,5 @@
 import { currentUser } from "@/lib/auth";
 import { serviceClient } from "@/lib/supabase";
-import { paymentMode } from "@/lib/config";
 import { LibraryView } from "@/components/store";
 import { redirect } from "next/navigation";
 import type { Book } from "@/lib/types";
@@ -15,13 +14,13 @@ export default async function Page() {
         .from("entitlements")
         .select("book_id")
         .eq("user_id", user.id)
-        .eq("mode", paymentMode())
+        .eq("mode", "live")
         .is("revoked_at", null),
       db
         .from("orders")
         .select("*")
         .eq("user_id", user.id)
-        .eq("mode", paymentMode())
+        .eq("mode", "live")
         .order("created_at", { ascending: false })
         .limit(100),
     ]);
@@ -47,7 +46,6 @@ export default async function Page() {
     <LibraryView
       books={books}
       orders={orders}
-      sandbox={paymentMode() === "sandbox"}
     />
   );
 }

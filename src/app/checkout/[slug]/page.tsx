@@ -12,13 +12,12 @@ export default async function Page({
   const book = await getBook((await params).slug);
   if (!book) notFound();
   const v = await viewer();
-  const state = await readiness(v?.admin);
+  const state = await readiness();
   return (
     <Checkout
       book={book}
       viewer={v}
       ready={state.ready}
-      sandbox={state.mode === "sandbox"}
     />
   );
 }
