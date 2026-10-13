@@ -13,14 +13,17 @@ export async function getBundles(admin = false, suppliedBooks?: Book[]): Promise
   if (!admin) query = query.eq("published", true).is("archived_at", null);
   const { data, error } = await query;
   if (error) throw error;
-  return data.map(({ bundle_members, ...bundle }) => {
+  const withCounts = data.map(({ bundle_members, ...bundle }) => {
     const members = (bundle_members as { book_id: string; position: number }[])
       .sort((a, b) => a.position - b.position)
       .map((m) => books.find((book) => book.id === m.book_id))
       .filter((book): book is Book => !!book);
-    return { ...bundle, members, expectedMembers: bundle_members.length } as Bundle & { expectedMembers: number };
-  }).filter((bundle) => admin || (bundle.members.length >= 2 && bundle.members.length === bundle.expectedMembers && bundle.members.every((book) =>
-    bundle.kind === "ebook" ? book.formats.length > 0 : book.print_price_paisa != null)));
+    return { bundle: { ...bundle, members } as Bundle, expectedMembers: bundle_members.length };
+  });
+  return withCounts.filter(({ bundle, expectedMembers }) => admin ||
+    (bundle.members.length >= 2 && bundle.members.length === expectedMembers && bundle.members.every((book) =>
+      !book.is_demo && (bundle.kind === "ebook" ? book.formats.length > 0 : book.print_price_paisa != null))))
+    .map(({ bundle }) => bundle);
 }
 
 export async function getBundle(slug: string): Promise<Bundle | null> {
