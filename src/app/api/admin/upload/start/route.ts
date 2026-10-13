@@ -33,7 +33,7 @@ export async function POST(request: Request) {
     if (bucketError) throw bucketError;
     if (!bucket) throw new AppError(503, "The private ebooks bucket is missing in Supabase Storage.");
     if (bucket.file_size_limit && data.size > bucket.file_size_limit)
-      throw new AppError(413, `The ebooks bucket currently allows only ${Math.floor(bucket.file_size_limit / bytesPerMb)} MB. Apply the new BoiShelf migration in Supabase before retrying.`);
+      throw new AppError(413, `The ebooks bucket currently allows only ${Math.floor(bucket.file_size_limit / bytesPerMb)} MB. Apply the new Read and Rich migration in Supabase before retrying.`);
     const path = `${data.bookId}/${crypto.randomUUID()}.${data.kind}`;
     const name = data.name.replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 120) || `ebook.${data.kind}`;
     stage = "storage_upload";

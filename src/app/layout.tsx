@@ -7,11 +7,11 @@ import "./globals.css";
 // Fontsource packages provide local font files; no browser request to Google Fonts.
 export const metadata: Metadata = {
   title: {
-    default: "BoiShelf — আপনার পরের প্রিয় বই",
-    template: "%s · BoiShelf",
+    default: "Read and Rich — আপনার পরের প্রিয় বই",
+    template: "%s · Read and Rich",
   },
   description:
-    "বাংলা ও ইংরেজি ইবুকের ছোট্ট একটি জগৎ। Discover PDF and EPUB ebooks on BoiShelf.",
+    "বাংলা ও ইংরেজি ইবুক এবং ছাপা বই। Discover ebooks, printed books and bundles at Read and Rich.",
   icons: { icon: "/favicon.svg" },
 };
 export const dynamic = "force-dynamic";

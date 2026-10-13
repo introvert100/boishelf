@@ -15,6 +15,7 @@ export default async function Page() {
         .select("book_id")
         .eq("user_id", user.id)
         .eq("mode", "live")
+        .neq("order_kind", "physical")
         .is("revoked_at", null),
       db
         .from("orders")

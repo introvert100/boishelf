@@ -10,7 +10,7 @@ export default async function Page({
   params: Promise<{ slug: string }>;
 }) {
   const book = await getBook((await params).slug);
-  if (!book) notFound();
+  if (!book || !book.formats.length) notFound();
   const v = await viewer();
   const state = await readiness();
   return (

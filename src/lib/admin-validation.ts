@@ -14,7 +14,7 @@ export const bookInput = z.object({
   description_bn: z.string().trim().min(10, "Write at least 10 characters in the Bengali description.").max(5000, "Keep the Bengali description under 5,000 characters."),
   description_en: z.string().trim().min(10, "Write at least 10 characters in the English description.").max(5000, "Keep the English description under 5,000 characters."),
   category: z.enum(["fiction", "growth", "lifestyle", "creativity", "travel"]),
-  price_paisa: z.number().int("Enter a price with no more than two decimal places.").min(1000, "Price must be at least 10 BDT.").max(10000000, "Price must be no more than 100,000 BDT."),
+  price_paisa: z.number().int("Enter a price with no more than two decimal places.").min(0, "Price cannot be negative.").max(10000000, "Price must be no more than 100,000 BDT.").refine((price) => price === 0 || price >= 1000, "Price must be 0 for print-only or at least 10 BDT for ebooks."),
   pages: z.number().int("Enter a whole number of pages.").min(1, "Pages must be between 1 and 20,000.").max(20000, "Pages must be between 1 and 20,000."),
   language: z.enum(["bn", "en"]),
   cover_style: z.enum([
@@ -33,7 +33,7 @@ export const bookInput = z.object({
 });
 export const policyInput = z
   .object({
-    slug: z.enum(["privacy", "terms", "refund", "copyright"]),
+    slug: z.enum(["privacy", "terms", "refund", "copyright", "shipping"]),
     title_bn: z.string().trim().min(1).max(120),
     title_en: z.string().trim().min(1).max(120),
     body_bn: z.string().trim().max(50000),

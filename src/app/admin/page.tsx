@@ -1,6 +1,8 @@
 import { currentUser, isOwner } from "@/lib/auth";
 import { serviceClient } from "@/lib/supabase";
 import { getBooks } from "@/lib/catalog";
+import { getBundles } from "@/lib/bundles";
+import { shippingRates, physicalReadiness } from "@/lib/commerce";
 import { readiness } from "@/lib/readiness";
 import { redirect, notFound } from "next/navigation";
 import { Admin } from "@/components/admin";
@@ -21,6 +23,9 @@ export default async function Page() {
     { data: policies, error: p },
     { count: cleanupPending, error: c },
     { data: rawClaims, error: claimError },
+    { data: physicalOrders, error: physicalError },
+    shipping,
+    physicalState,
   ] = await Promise.all([
     getBooks(true),
     readiness(),
@@ -33,8 +38,12 @@ export default async function Page() {
     db.from("storage_cleanup_jobs").select("id", { count: "exact", head: true }).is("done_at", null),
     db.from("manual_payment_claims").select("*").eq("status", "submitted")
       .order("submitted_at", { ascending: true }).limit(100),
+    db.from("orders").select("*,order_shipping(*),order_items(id,item_type,title_bn,title_en,format,quantity,unit_price_paisa)")
+      .eq("order_kind", "physical").order("created_at", { ascending: false }).limit(100),
+    shippingRates(),
+    physicalReadiness(),
   ]);
-  if (o || p || c || claimError) throw o || p || c || claimError;
+  if (o || p || c || claimError || physicalError) throw o || p || c || claimError || physicalError;
   let claims: ReviewClaim[] = [];
   if (rawClaims?.length) {
     const { data: claimOrders, error: orderError } = await db.from("orders").select("*")
@@ -57,6 +66,10 @@ export default async function Page() {
       gates={state.gates}
       ownerId={user.id}
       cleanupPending={cleanupPending || 0}
+      bundles={await getBundles(true, books)}
+      physicalOrders={physicalOrders || []}
+      shipping={shipping}
+      physicalGates={physicalState.gates}
     />
   );
 }

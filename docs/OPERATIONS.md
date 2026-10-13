@@ -1,10 +1,16 @@
-# Manual payment operations
+# Read and Rich order operations
 
 ## Review an order
 
 Open `/admin` → **Orders**. For every submitted claim, independently check the **receiving number, exact amount, bKash transaction ID, sender last four digits and order reference when present** against your bKash app or statement. A buyer-entered ID or screenshot is not payment proof. If the transfer matches, choose **Verified — approve**; this atomically marks the order paid and grants one live entitlement. If it does not match, enter a specific reason and reject the claim. The buyer sees that reason and can submit corrected details. Do not approve uncertain or duplicated transfers.
 
-Customers can refresh `/orders/<id>` to see pending, under-review, rejected or paid status. The store does not receive automatic bKash callbacks or poll a payment API. It will never unlock a book solely because a transaction ID was entered. Check the queue regularly and respond through your published support address when a payment is disputed.
+Customers can refresh `/orders/<id>` to see pending, under-review, rejected or paid status. The store does not receive automatic bKash callbacks or poll a payment API. It will never unlock a book solely because a transaction ID was entered. Ebook bundle approval unlocks each included title; printed-order approval marks payment paid but grants no ebook entitlement. Check the queue regularly and respond through your published support address when a payment is disputed.
+
+## Printed orders and cash on delivery
+
+Open `/admin` → **Commerce** to see the private address and saved item/price snapshot. Enter a delivery target for each order. Book a COD-capable courier manually, enter its name and tracking number, then mark the order shipped. The buyer sees progress in **My Orders**; no email or courier API is sent. Stock is reserved when ordered and remains reserved until dispatch or pre-dispatch cancellation. Dispatch consumes it. Cancel a pending order before dispatch to release stock; a paid bKash order cancelled before dispatch requires a manual refund. After a return, inspect the books and adjust on-hand stock with a recorded reason before selling them again.
+
+Mark COD **paid only after** the courier delivers and you actually receive the cash. If a buyer says they sent bKash money before cancellation, reconcile it first. Returns and refunds need an explicit admin action; keep the courier and refund references in your own records. Do not put private addresses, PINs, OTPs, or signed download links into logs or support screenshots.
 
 ## Refunds and records
 
@@ -14,6 +20,6 @@ Historical SSLCOMMERZ sandbox orders remain labelled as legacy tests in Admin. T
 
 ## Incidents and rollback
 
-If review or downloads malfunction, set `MANUAL_BKASH_ENABLED=false` and redeploy; keep Admin access and existing order pages running so paid claims can be resolved. Capture the action, timestamp, request ID, network response and Render/Supabase logs with secrets hidden. Check the database row and private storage object before changing code. Re-run `npm run typecheck`, `npm test`, `npm run build` and relevant Playwright tests after a fix. Verify a buyer cannot approve a claim or download before approval.
+If review, stock, or downloads malfunction, set `MANUAL_BKASH_ENABLED=false` and `COD_ENABLED=false` in both `render.yaml` and Render, then redeploy. Keep Admin and existing order pages running so claims and deliveries can be resolved. Capture the action, timestamp, request ID, network response and Render/Supabase logs with secrets hidden. Check the order, inventory events, database row, and private storage object before changing code. Re-run `npm run typecheck`, `npm test`, `npm run build` and relevant Playwright tests after a fix. Verify buyers cannot see others' addresses, approve a claim, or download before approval.
 
 Use Supabase backups and a restore drill before public sales. Signed ebook links expire after 60 seconds, but a link already issued may remain usable until it expires even after sign-out. Changing the bKash receiving number affects new orders only; each existing order keeps its original receiving number.

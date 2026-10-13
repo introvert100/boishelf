@@ -2,7 +2,7 @@
 export function samplePdf(title: string): Uint8Array {
   const lines = [
     title.replace(/[^\x20-\x7e]/g, "?").slice(0, 75),
-    "An original BoiShelf sample",
+    "An original Read and Rich sample",
     "",
     "A small invitation to read",
     "",
@@ -11,7 +11,7 @@ export function samplePdf(title: string): Uint8Array {
     "different perspective. You do not need to finish a chapter today.",
     "One thoughtful page can be enough to start a new habit.",
     "",
-    "This sample is created for the BoiShelf pilot. It demonstrates the",
+    "This sample is created for the Read and Rich pilot. It demonstrates the",
     "purchase and download experience. It is not a full commercial book.",
   ];
   const escape = (value: string) => value.replace(/[\\()]/g, "\\$&");

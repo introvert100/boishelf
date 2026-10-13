@@ -52,14 +52,14 @@ test("PostgreSQL migration, access policies and atomic payment transitions", asy
     amount_paisa: number;
     reused: boolean;
   };
-  await t.test("all twelve public tables have RLS", async () => {
+  await t.test("all public tables have RLS", async () => {
     const { rows } = await db.query<{
       relname: string;
       relrowsecurity: boolean;
     }>(
       "select relname,relrowsecurity from pg_class join pg_namespace on pg_namespace.oid=relnamespace where nspname='public' and relkind='r'",
     );
-    assert.equal(rows.length, 12);
+    assert.equal(rows.length, 21);
     assert.ok(rows.every((r) => r.relrowsecurity));
   });
   await t.test("free-tier ebook bucket accepts 50 MB files and remains private", async () => {
@@ -508,6 +508,120 @@ test("PostgreSQL migration, access policies and atomic payment transitions", asy
     assert.equal((await db.query("select * from entitlements where book_id=$1 and mode='live'", [manualBook])).rows.length, 1);
     await assert.rejects(db.query("select reject_manual_claim($1,$2,$3,$4)", [created.id, secondClaim, other, "Trying to downgrade"]), /claim_not_pending/);
     await assert.rejects(db.query("select create_manual_order($1,$2,$3)", [reader, manualBook, "01712345678"]), /already_owned/);
+  });
+  await t.test("printed cart reserves component stock, retries safely, and COD is paid only after collection", async () => {
+    const first = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+    const second = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+    for (const [id, slug] of [[first, "printed-first"], [second, "printed-second"]]) {
+      await db.query(`insert into books(id,slug,title_bn,title_en,author_bn,author_en,description_bn,description_en,
+        category,price_paisa,pages,published,cover_path) values($1,$2,'ছাপা','Printed','লেখক','Author',
+        'ছাপা বইয়ের বিবরণ','Printed description','fiction',0,50,true,'private/cover.png')`, [id, slug]);
+    }
+    await db.query("select save_print_edition($1,$2,1000,2,'Received copies')", [first, reader]);
+    await db.query("select save_print_edition($1,$2,1200,1,'Received copies')", [second, reader]);
+    await db.query("update shipping_settings set dhaka_paisa=500,outside_paisa=900 where id='default'");
+    const bundle = (await db.query<{ id: string }>(`select save_bundle(null,'print-pair','physical','জোড়া','Print pair',
+      'দুটি ছাপা বই','Two printed books',1500,true,array[$1,$2]::uuid[]) as id`, [first, second])).rows[0].id;
+    const lines = JSON.stringify([{ kind: "book", id: first, quantity: 1 }, { kind: "bundle", id: bundle, quantity: 1 }]);
+    const key = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+    await assert.rejects(asRole("authenticated", reader, () => db.query(
+      "select create_physical_order($1,$2,$3::jsonb,$4,$5,$6,$7,$8,$9,$10,$11)",
+      [reader, key, lines, "Reader Name", "01712345678", "Dhaka", "Dhanmondi", "House 1 Road 2", "cod", null, 3000])));
+    const params = [reader, key, lines, "Reader Name", "01712345678", "Dhaka", "Dhanmondi", "House 1 Road 2", "cod", null, 3000];
+    const order = (await db.query<{ v: { id: string; amount_paisa: number; reused: boolean; status: string } }>(
+      "select create_physical_order($1,$2,$3::jsonb,$4,$5,$6,$7,$8,$9,$10,$11) as v", params)).rows[0].v;
+    assert.equal(order.amount_paisa, 3000);
+    assert.equal(order.status, "pending");
+    await db.query(`select save_bundle($1,'print-pair','physical','জোড়া','Print pair',
+      'দুটি ছাপা বই','Two printed books',1800,true,array[$2,$3]::uuid[])`, [bundle, first, second]);
+    assert.equal((await db.query<{ unit_price_paisa: number }>(
+      "select unit_price_paisa from order_items where order_id=$1 and item_type='bundle'", [order.id])).rows[0].unit_price_paisa, 1500);
+    assert.equal((await db.query<{ book_id: string }>(`select m.book_id from order_item_members m
+      join order_items i on i.id=m.order_item_id where i.order_id=$1`, [order.id])).rows.length, 2);
+    assert.equal((await db.query<{ v: { id: string; reused: boolean } }>(
+      "select create_physical_order($1,$2,$3::jsonb,$4,$5,$6,$7,$8,$9,$10,$11) as v", params)).rows[0].v.reused, true);
+    assert.equal((await db.query<{ reserved: number }>("select reserved from print_editions where book_id=$1", [first])).rows[0].reserved, 2);
+    await assert.rejects(db.query("select create_physical_order($1,$2,$3::jsonb,$4,$5,$6,$7,$8,$9,$10,$11)",
+      [other, "dddddddd-dddd-4ddd-8ddd-dddddddddddd", JSON.stringify([{kind:"book",id:first,quantity:1}]),
+        "Other Reader", "01812345678", "Dhaka", "Banani", "House 3 Road 4", "cod", null, 1500]), /out_of_stock/);
+    assert.equal((await db.query("select * from entitlements where order_id=$1", [order.id])).rows.length, 0);
+    await assert.rejects(asRole("authenticated", other, () => db.query("select * from order_shipping")));
+    await db.query("select change_physical_order($1,$2,'target',$3,null,null,null)", [order.id, reader, "2026-12-01"]);
+    await db.query("select change_physical_order($1,$2,'ship',null,'Courier A','TRACK123',null)", [order.id, reader]);
+    assert.equal((await db.query<{ status: string }>("select status from orders where id=$1", [order.id])).rows[0].status, "pending");
+    await db.query("select change_physical_order($1,$2,'deliver',null,null,null,null)", [order.id, reader]);
+    await db.query("select change_physical_order($1,$2,'collect',null,null,null,null)", [order.id, reader]);
+    assert.equal((await db.query<{ status: string }>("select status from orders where id=$1", [order.id])).rows[0].status, "paid");
+    assert.equal((await db.query<{ on_hand: number; reserved: number }>(
+      "select on_hand,reserved from print_editions where book_id=$1", [first])).rows[0].on_hand, 0);
+    assert.equal((await db.query<{ reserved: number }>("select reserved from print_editions where book_id=$1", [first])).rows[0].reserved, 0);
+  });
+  await t.test("printed bKash orders require approval, cancellation releases stock, and refunds stay manual", async () => {
+    const printBook = "abababab-abab-4bab-8bab-abababababab";
+    await db.query(`insert into books(id,slug,title_bn,title_en,author_bn,author_en,description_bn,description_en,
+      category,price_paisa,pages,published,cover_path) values($1,'prepaid-print','ছাপা','Printed',
+      'লেখক','Author','ছাপা বইয়ের বিবরণ','Printed description','fiction',0,50,true,'private/cover.png')`, [printBook]);
+    await db.query("select save_print_edition($1,$2,1000,1,'Received a copy')", [printBook, reader]);
+    const lines = JSON.stringify([{ kind: "book", id: printBook, quantity: 1 }]);
+    const params = [reader, "abababab-1111-4111-8111-abababababab", lines, "Reader Name", "01712345678",
+      "Dhaka", "Dhanmondi", "House 1 Road 2", "bkash_manual", "01812345678", 1500];
+    await assert.rejects(db.query("select create_physical_order($1,$2,$3::jsonb,$4,$5,$6,$7,$8,$9,$10,$11)",
+      [...params.slice(0, 10), 1600]), /price_changed/);
+    assert.equal((await db.query("select * from orders where client_key=$1", [params[1]])).rows.length, 0);
+    const order = (await db.query<{ v: { id: string; status: string } }>(
+      "select create_physical_order($1,$2,$3::jsonb,$4,$5,$6,$7,$8,$9,$10,$11) as v", params)).rows[0].v;
+    await assert.rejects(db.query("select change_physical_order($1,$2,'ship',null,'Courier','TRACK1',null)",
+      [order.id, reader]), /invalid_transition/);
+    await db.query("select submit_manual_claim($1,$2,'PRINT123','1234')", [reader, order.id]);
+    const claim = (await db.query<{ id: string }>("select id from manual_payment_claims where order_id=$1", [order.id])).rows[0].id;
+    assert.equal((await db.query("select * from entitlements where order_id=$1", [order.id])).rows.length, 0);
+    await db.query("select approve_manual_claim($1,$2,$3)", [order.id, claim, other]);
+    await db.query("select approve_manual_claim($1,$2,$3)", [order.id, claim, other]);
+    assert.equal((await db.query("select * from entitlements where order_id=$1", [order.id])).rows.length, 0);
+    await db.query("select change_physical_order($1,$2,'cancel_paid',null,null,null,'Customer requested cancellation')", [order.id, other]);
+    assert.equal((await db.query<{ reserved: number }>("select reserved from print_editions where book_id=$1", [printBook])).rows[0].reserved, 0);
+    assert.equal((await db.query<{ refund_due: boolean }>("select refund_due from order_shipping where order_id=$1", [order.id])).rows[0].refund_due, true);
+    await db.query("select change_physical_order($1,$2,'refund',null,null,null,'Refund sent')", [order.id, other]);
+    assert.equal((await db.query<{ status: string }>("select status from orders where id=$1", [order.id])).rows[0].status, "refunded");
+    await assert.rejects(db.query("select change_physical_order($1,$2,'refund',null,null,null,null)", [order.id, other]), /invalid_transition/);
+    const codParams = [other, "abababab-2222-4222-8222-abababababab", lines, "Other Reader", "01812345678",
+      "Dhaka", "Banani", "House 3 Road 4", "cod", null, 1500];
+    const cod = (await db.query<{ v: { id: string } }>(
+      "select create_physical_order($1,$2,$3::jsonb,$4,$5,$6,$7,$8,$9,$10,$11) as v", codParams)).rows[0].v;
+    await db.query("select change_physical_order($1,$2,'cancel',null,null,null,'Buyer cancelled')", [cod.id, other]);
+    assert.equal((await db.query<{ reserved: number }>("select reserved from print_editions where book_id=$1", [printBook])).rows[0].reserved, 0);
+    assert.equal((await db.query<{ status: string }>("select status from orders where id=$1", [cod.id])).rows[0].status, "cancelled");
+  });
+  await t.test("unsold printed books delete after inventory adjustments", async () => {
+    const printBook = "cdcdcdcd-cdcd-4dcd-8dcd-cdcdcdcdcdcd";
+    await db.query(`insert into books(id,slug,title_bn,title_en,author_bn,author_en,description_bn,description_en,
+      category,price_paisa,pages,published,cover_path) values($1,'unsold-print','ছাপা','Printed',
+      'লেখক','Author','ছাপা বইয়ের বিবরণ','Printed description','fiction',0,50,false,'private/cover.png')`, [printBook]);
+    await db.query("select save_print_edition($1,$2,1000,2,'Received copies')", [printBook, reader]);
+    await db.query("select delete_unsold_book($1)", [printBook]);
+    assert.equal((await db.query("select * from books where id=$1", [printBook])).rows.length, 0);
+    assert.equal((await db.query("select * from inventory_events where book_id=$1", [printBook])).rows.length, 0);
+  });
+  await t.test("ebook bundle grants all member downloads only after verified bKash review", async () => {
+    const ids = ["eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee", "ffffffff-ffff-4fff-8fff-ffffffffffff"];
+    for (const [index, id] of ids.entries()) {
+      await db.query(`insert into books(id,slug,title_bn,title_en,author_bn,author_en,description_bn,description_en,
+        category,price_paisa,pages,published) values($1,$2,'ইবুক','Ebook','লেখক','Author',
+        'ইবুকের বিবরণ','Ebook description','fiction',1500,20,true)`, [id, `ebook-bundle-${index}`]);
+      await db.query("insert into book_formats(book_id,format,storage_path,original_name,size_bytes) values($1,'pdf',$2,'ebook.pdf',100)",
+        [id, `private/ebook-bundle-${index}.pdf`]);
+    }
+    const bundle = (await db.query<{ id: string }>(`select save_bundle(null,'ebook-pair','ebook','ইবুক জোড়া','Ebook pair',
+      'দুটি ইবুক','Two ebooks',2500,true,array[$1,$2]::uuid[]) as id`, ids)).rows[0].id;
+    const order = (await db.query<{ v: { id: string } }>(
+      "select create_ebook_bundle_order($1,$2,'01712345678') as v", [other, bundle])).rows[0].v;
+    assert.equal((await db.query("select * from entitlements where order_id=$1", [order.id])).rows.length, 0);
+    await db.query("select submit_manual_claim($1,$2,'BUNDLE123','1234')", [other, order.id]);
+    const claim = (await db.query<{ id: string }>("select id from manual_payment_claims where order_id=$1", [order.id])).rows[0].id;
+    await db.query("select approve_manual_claim($1,$2,$3)", [order.id, claim, reader]);
+    await db.query("select approve_manual_claim($1,$2,$3)", [order.id, claim, reader]);
+    assert.equal((await db.query("select * from entitlements where order_id=$1", [order.id])).rows.length, 2);
+    await assert.rejects(db.query("select create_ebook_bundle_order($1,$2,'01712345678')", [other, bundle]), /already_owned/);
   });
   await db.close();
 });

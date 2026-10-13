@@ -34,6 +34,7 @@ import {
   Smartphone,
   Mail,
   KeyRound,
+  ShoppingCart,
 } from "lucide-react";
 import type { Book, Locale, Viewer, Order, Policy, ManualClaim } from "@/lib/types";
 import { categories } from "@/lib/demo";
@@ -41,6 +42,7 @@ import { browserClient } from "@/lib/supabase-browser";
 import { isGmailUser } from "@/lib/security";
 import { Turnstile } from "@/components/turnstile";
 import { PreviewDialog } from "@/components/preview-dialog";
+import { addToCart } from "@/lib/cart";
 
 const Language = createContext<{
   locale: Locale;
@@ -94,12 +96,12 @@ export function Shell({
       </a>
       <header className="header">
         <div className="container header-inner">
-          <Link href="/" className="brand" aria-label="BoiShelf home">
+          <Link href="/" className="brand" aria-label="Read and Rich home">
             <span className="brand-icon">
               <BookOpen size={23} />
             </span>
             <span>
-              Boi<span className="brand-light">Shelf</span>
+              Read <span className="brand-light">and Rich</span>
               <i />
             </span>
           </Link>
@@ -109,6 +111,7 @@ export function Shell({
           >
             <Link href="/#catalogue">{t("বই খুঁজুন", "Explore books")}</Link>
             <Link href="/#categories">{t("বিভাগসমূহ", "Categories")}</Link>
+            <Link href="/bundles">{t("বান্ডেল", "Bundles")}</Link>
             <Link href="/how-it-works">
               {t("যেভাবে কাজ করে", "How it works")}
             </Link>
@@ -129,6 +132,8 @@ export function Shell({
               <Library size={19} />
               <span>{t("আমার লাইব্রেরি", "My library")}</span>
             </Link>
+            <Link className="library-link cart-link" href="/cart" aria-label={t("কার্ট", "Cart")}><ShoppingCart size={19} /><span>{t("কার্ট", "Cart")}</span></Link>
+            <Link className="library-link orders-link" href="/orders">{t("অর্ডার", "Orders")}</Link>
             {viewer ? (
               <button
                 onClick={logout}
@@ -160,6 +165,9 @@ export function Shell({
             <Link href="/how-it-works" onClick={() => setMenu(false)}>
               {t("যেভাবে কাজ করে", "How it works")}
             </Link>
+            <Link href="/bundles" onClick={() => setMenu(false)}>{t("বান্ডেল", "Bundles")}</Link>
+            <Link href="/cart" onClick={() => setMenu(false)}>{t("কার্ট", "Cart")}</Link>
+            <Link href="/orders" onClick={() => setMenu(false)}>{t("আমার অর্ডার", "My orders")}</Link>
             {viewer ? (
               <button onClick={logout}>{t("লগ আউট", "Sign out")}</button>
             ) : (
@@ -179,7 +187,7 @@ export function Shell({
                 <BookOpen size={23} />
               </span>
               <span>
-                Boi<span className="brand-light">Shelf</span>
+                Read <span className="brand-light">and Rich</span>
                 <i />
               </span>
             </Link>
@@ -193,6 +201,8 @@ export function Shell({
           <div className="footer-links">
             <Link href="/how-it-works">{t("কীভাবে কিনবেন", "How to buy")}</Link>
             <Link href="/library">{t("আমার লাইব্রেরি", "My library")}</Link>
+            <Link href="/orders">{t("আমার অর্ডার", "My orders")}</Link>
+            <Link href="/bundles">{t("বান্ডেল", "Bundles")}</Link>
             {viewer?.admin && (
               <Link href="/admin">
                 <LayoutDashboard size={14} />{" "}
@@ -202,7 +212,7 @@ export function Shell({
           </div>
           <div className="payment-brands">
             <small>
-              {t("ম্যানুয়াল যাচাইয়ের পর bKash পেমেন্ট", "MANUALLY VERIFIED BKASH PAYMENTS")}
+              {t("ইবুকে bKash · ছাপা বইয়ে COD বা bKash", "EBOOK BKASH · PRINTED COD OR BKASH")}
             </small>
             <div>
               <b className="bkash">bKash</b>
@@ -210,13 +220,13 @@ export function Shell({
           </div>
         </div>
         <div className="container footer-bottom">
-          <span>© {new Date().getFullYear()} BoiShelf</span>
+          <span>© {new Date().getFullYear()} Read and Rich</span>
           <div>
-            {["privacy", "terms", "refund", "copyright"].map((slug, i) => (
+            {["privacy", "terms", "refund", "copyright", "shipping"].map((slug, i) => (
               <Link key={slug} href={`/policies/${slug}`}>
                 {t(
-                  ["গোপনীয়তা", "শর্তাবলি", "রিফান্ড", "কপিরাইট"][i],
-                  ["Privacy", "Terms", "Refunds", "Copyright"][i],
+                  ["গোপনীয়তা", "শর্তাবলি", "রিফান্ড", "কপিরাইট", "ডেলিভারি"][i],
+                  ["Privacy", "Terms", "Refunds", "Copyright", "Shipping"][i],
                 )}
               </Link>
             ))}
@@ -269,7 +279,7 @@ export function Cover({ book, hero = false }: { book: Book; hero?: boolean }) {
       aria-label={locale === "bn" ? book.title_bn : book.title_en}
     >
       <div className="cover-top">
-        BOISHELF <span>EDITION 01</span>
+        READ AND RICH <span>EDITION 01</span>
       </div>
       <div className="cover-title">
         {locale === "bn" ? book.title_bn : book.title_en}
@@ -303,9 +313,9 @@ export function Catalogue({ books }: { books: Book[] }) {
         )
         .sort((a, b) =>
           sort === "low"
-            ? a.price_paisa - b.price_paisa
+            ? (a.formats.length ? a.price_paisa : a.print_price_paisa || 0) - (b.formats.length ? b.price_paisa : b.print_price_paisa || 0)
             : sort === "high"
-              ? b.price_paisa - a.price_paisa
+              ? (b.formats.length ? b.price_paisa : b.print_price_paisa || 0) - (a.formats.length ? a.price_paisa : a.print_price_paisa || 0)
               : 0,
         ),
     [books, category, search, sort],
@@ -329,8 +339,8 @@ export function Catalogue({ books }: { books: Book[] }) {
           </h1>
           <p>
             {t(
-              "গল্প, নতুন ভাবনা আর শেখার আনন্দ। পছন্দের ইবুকটি বেছে নিন, পড়ুন আপনার নিজের সময়ে।",
-              "Stories to get lost in. Ideas to grow with. Discover your next great read, wherever life takes you.",
+              "গল্প, নতুন ভাবনা আর শেখার আনন্দ। ইবুক বা ছাপা বই বেছে নিন, পড়ুন আপনার নিজের সময়ে।",
+              "Stories and ideas in ebooks and printed books. Find your next great read.",
             )}
           </p>
           <a className="button" href="#catalogue">
@@ -380,8 +390,8 @@ export function Catalogue({ books }: { books: Book[] }) {
         <div>
           <ShieldCheck />
           <span>
-            <b>{t("bKash পেমেন্ট", "Pay with bKash")}</b>
-            <small>{t("লেনদেনটি মালিক যাচাই করবেন", "Every transfer is checked by the owner")}</small>
+            <b>{t("bKash বা ডেলিভারিতে নগদ", "bKash or cash on delivery")}</b>
+            <small>{t("ছাপা বইয়ে COD; bKash মালিক যাচাই করেন", "COD for print; bKash transfers are checked")}</small>
           </span>
         </div>
         <div>
@@ -506,9 +516,9 @@ export function Catalogue({ books }: { books: Book[] }) {
                   <p>{locale === "bn" ? book.author_bn : book.author_en}</p>
                   <div className="book-bottom">
                     <strong>
-                      <Price paisa={book.price_paisa} />
+                      <Price paisa={book.formats.length ? book.price_paisa : book.print_price_paisa || 0} />
                     </strong>
-                    <span>{book.formats.join(" · ")}</span>
+                    <span>{[...book.formats, ...(book.print_price_paisa != null ? [t("ছাপা", "PRINT")] : [])].join(" · ")}</span>
                   </div>
                 </div>
               </article>
@@ -565,6 +575,14 @@ export function Catalogue({ books }: { books: Book[] }) {
 export function BookDetail({ book }: { book: Book }) {
   const { locale, t } = useLanguage();
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [cartError, setCartError] = useState("");
+  const availablePrint = (book.print_on_hand || 0) - (book.print_reserved || 0);
+  function addPrint() {
+    if (!addToCart("book", book.id)) {
+      setCartError(t("কার্টে সর্বোচ্চ পরিমাণ আছে।", "Cart quantity limit reached.")); return;
+    }
+    window.location.assign("/cart");
+  }
   return (
     <div className="container page">
       <div className="breadcrumbs">
@@ -600,31 +618,33 @@ export function BookDetail({ book }: { book: Book }) {
             </div>
             <div>
               <small>{t("ফরম্যাট", "Formats")}</small>
-              <b>{book.formats.join(" + ") || "—"}</b>
+              <b>{[...book.formats, ...(book.print_price_paisa != null ? [t("ছাপা", "Print")] : [])].join(" + ") || "—"}</b>
             </div>
           </div>
-          <div className="detail-price">
-            <Price paisa={book.price_paisa} />
-            <small>
-              {t(
-                "সব উপলব্ধ ফরম্যাট অন্তর্ভুক্ত",
-                "Includes all available formats",
-              )}
-            </small>
+          <div className="edition-choices">
+            {book.formats.length > 0 && <div className="panel edition-choice">
+              <h2>{t("ইবুক", "Ebook")}</h2><p>{book.formats.join(" + ")}</p>
+              <strong><Price paisa={book.price_paisa} /></strong>
+              {!book.is_demo && <Link className="button wide" href={`/checkout/${book.slug}`}>{t("ইবুক কিনুন", "Buy ebook")}</Link>}
+            </div>}
+            {book.print_price_paisa != null && <div className="panel edition-choice">
+              <h2>{t("ছাপা বই", "Printed book")}</h2>
+              <p>{availablePrint > 0 ? t(`${availablePrint}টি কপি আছে`, `${availablePrint} copies available`) : t("মজুত নেই", "Out of stock")}</p>
+              <strong><Price paisa={book.print_price_paisa} /></strong>
+              {!book.is_demo && <button className="button wide" disabled={availablePrint < 1} onClick={addPrint}><ShoppingCart size={17} /> {t("কার্টে যোগ করুন", "Add to cart")}</button>}
+            </div>}
           </div>
-          {!book.is_demo && <Link className="button wide" href={`/checkout/${book.slug}`}>
-            {t("এখনই কিনুন", "Buy this ebook")}
-          </Link>}
+          {cartError && <p className="notice error" role="alert">{cartError}</p>}
           {!!book.preview_pages && <button type="button" className="button secondary wide" onClick={() => setPreviewOpen(true)}>
             {t(`প্রথম ${book.preview_pages} পৃষ্ঠা পড়ুন`, `Read ${book.preview_pages}-page preview`)}
           </button>}
-          <p className="secure-note">
+          {!!book.formats.length && <p className="secure-note">
             <ShieldCheck size={16} />
             {t(
               "bKash পেমেন্ট যাচাইয়ের পর ডাউনলোড",
               "Download after manual bKash payment verification",
             )}
-          </p>
+          </p>}
           {book.is_demo && (
             <div className="notice">
               {t(
@@ -751,7 +771,7 @@ export function SignIn({
         <span className="large-icon">
           <BookOpen size={32} />
         </span>
-        <span className="eyebrow muted">BOISHELF</span>
+        <span className="eyebrow muted">READ AND RICH</span>
         <h1>
           {t("আপনার পড়ার জগতে স্বাগতম", "Welcome to your reading world")}
         </h1>
@@ -1181,7 +1201,10 @@ export function statusLabel(status: string, locale: Locale) {
   };
   return (locale === "bn" ? bn : en)[status] || status;
 }
-export function OrderView({ initial, initialClaim }: { initial: Order; initialClaim: ManualClaim | null }) {
+export function OrderView({ initial, initialClaim, bundleSnapshot }: {
+  initial: Order; initialClaim: ManualClaim | null;
+  bundleSnapshot?: { title_bn: string; title_en: string; members: { title_bn: string; title_en: string }[] } | null;
+}) {
   const { locale, t } = useLanguage();
   const [order, setOrder] = useState(initial);
   const [claim, setClaim] = useState(initialClaim);
@@ -1231,7 +1254,9 @@ export function OrderView({ initial, initialClaim }: { initial: Order; initialCl
           <CircleHelp size={48} />
         )}
         <h1>{statusLabel(order.status, locale)}</h1>
-        <h3>{order.book_title}</h3>
+        <h3>{bundleSnapshot ? (locale === "bn" ? bundleSnapshot.title_bn : bundleSnapshot.title_en) : order.book_title}</h3>
+        {bundleSnapshot && <ul className="bundle-order-members">{bundleSnapshot.members.map((member, index) =>
+          <li key={index}>{locale === "bn" ? member.title_bn : member.title_en}</li>)}</ul>}
         <p>
           <Price paisa={order.amount_paisa} />
         </p>
@@ -1295,7 +1320,7 @@ export function PolicyView({
   const { locale, t } = useLanguage();
   return (
     <div className="container page narrow policy-page">
-      <span className="eyebrow muted">BOISHELF</span>
+      <span className="eyebrow muted">READ AND RICH</span>
       <h1>
         {policy
           ? locale === "bn"
@@ -1306,6 +1331,7 @@ export function PolicyView({
               terms: t("শর্তাবলি", "Terms of service"),
               refund: t("রিফান্ড নীতি", "Refund policy"),
               copyright: t("কপিরাইট নীতি", "Copyright policy"),
+              shipping: t("ডেলিভারি নীতি", "Shipping policy"),
             }[slug] || slug}
       </h1>
       {policy ? (
@@ -1315,8 +1341,8 @@ export function PolicyView({
       ) : (
         <div className="notice">
           {t(
-            "স্টোর মালিকের চূড়ান্ত নীতিমালা এখনো প্রকাশিত হয়নি। এটি পরীক্ষামূলক স্টোর; আসল টাকা নেওয়া হচ্ছে না।",
-            "The store owner’s final policy has not been published yet. This is a pilot store and real payments are disabled.",
+            "এই নীতিমালাটি এখনো প্রকাশিত হয়নি। প্রয়োজন হলে স্টোর মালিকের সঙ্গে যোগাযোগ করুন।",
+            "This policy is not published yet. Contact the store owner if you need help.",
           )}
         </div>
       )}
@@ -1330,29 +1356,29 @@ export function HowItWorks() {
       <span className="eyebrow muted">
         {t("পড়া শুরু করা সহজ", "A GOOD READ IS THREE STEPS AWAY")}
       </span>
-      <h1>{t("যেভাবে বই কিনবেন", "A simpler way to read")}</h1>
+      <h1>{t("যেভাবে বই কিনবেন", "How to buy your books")}</h1>
       <div className="steps">
         {[
           [
             BookOpen,
             "পছন্দের বই বেছে নিন",
             "Find your next book",
-            "ক্যাটালগ ঘুরে দেখুন, বইয়ের বিবরণ ও ফরম্যাট দেখে নিন।",
-            "Browse the collection and check the description and available formats.",
+            "ক্যাটালগ ও বান্ডেল দেখুন; ইবুক বা ছাপা সংস্করণ বেছে নিন।",
+            "Browse books and bundles; choose an ebook or printed edition.",
           ],
           [
             ShieldCheck,
             "Gmail দিয়ে লগইন ও পেমেন্ট",
             "Sign in and check out",
-            "Gmail দিয়ে লগইন করে bKash-এ টাকা পাঠান, তারপর লেনদেনের আইডি জমা দিন।",
-            "Sign in with Gmail, pay through bKash, then submit your transaction ID.",
+            "Gmail দিয়ে লগইন করুন। ছাপা বইয়ের জন্য ডেলিভারিতে নগদ বা bKash বেছে নিন; ইবুকে bKash ব্যবহার করুন।",
+            "Sign in with Gmail. Choose COD or bKash for print; use bKash for ebooks.",
           ],
           [
             Download,
-            "ডাউনলোড করে পড়ুন",
-            "Download and enjoy",
-            "মালিক পেমেন্ট যাচাই করলে লাইব্রেরি থেকে PDF বা EPUB নামিয়ে নিন।",
-            "After the owner verifies payment, download your PDF or EPUB from My library.",
+            "বই হাতে পান বা ডাউনলোড করুন",
+            "Receive or download",
+            "ছাপা বইয়ের অর্ডার ও কুরিয়ারের তথ্য 'আমার অর্ডার'-এ দেখুন। bKash যাচাই হলে ইবুক লাইব্রেরি থেকে নামান।",
+            "Track printed orders in My Orders. Download ebooks from My Library after bKash verification.",
           ],
         ].map(([Icon, bn, en, dbn, den], i) => {
           const C = Icon as typeof BookOpen;

@@ -1,25 +1,33 @@
-# Deploy BoiShelf with manual bKash checkout
+# Deploy Read and Rich
 
 ## 1. Apply the database migration
 
-Back up the Supabase project. Apply every unapplied file in `supabase/migrations/` in filename order. Existing installations need `20261012000000_manual_bkash.sql` after the previous migrations. In Supabase SQL Editor, paste that file and run it once. The migration preserves historical sandbox orders and adds RLS-protected manual-claims and transaction-reservation tables plus service-only functions. Do not rerun the initial schema or mix SQL Editor and CLI migration history blindly.
+Back up the Supabase project. Apply every unapplied file in `supabase/migrations/` in filename order. The existing store should already have `20261012000000_manual_bkash.sql`; apply the new `20261013000000_read_and_rich_commerce.sql` **before** deploying the new app. Paste its complete contents into Supabase SQL Editor and run once. It preserves historical orders and entitlements while adding printed stock, bundles, order snapshots, private shipping addresses, and service-only order functions. Do not rerun the initial schema or mix SQL Editor and CLI migration history blindly.
 
-Verify that `public.manual_payment_claims` and `public.manual_payment_references` exist with RLS enabled, and the `ebooks` and `covers` buckets remain private. Run `npm run db:test` locally before deploying.
+Verify RLS on `print_editions`, `bundles`, `bundle_members`, `order_items`, `order_item_members`, `order_shipping`, `fulfillment_events`, and `inventory_events`. The `ebooks` and `covers` buckets remain private. Run `npm run db:test` locally before deploying.
 
 ## 2. Configure existing services
 
-Keep the existing Supabase URL, publishable key, server secret, Gmail OTP/Brevo SMTP, Turnstile, `ADMIN_EMAIL`, app URL, support email and monitor token settings. Use the Render Blueprint in `render.yaml` for the web service. Its new bKash flags are **false by default**. Remove old `PAYMENT_MODE`, `SSLCOMMERZ_*`, `LIVE_PAYMENTS_*`, `MERCHANT_APPROVED` and `PAID_HOSTING_CONFIRMED` variables from Render after the new release is live.
+Keep the existing Supabase URL, publishable key, server secret, Gmail OTP/Brevo SMTP, Turnstile, `ADMIN_EMAIL`, support email and monitor token settings. Use `render.yaml` for the existing `boishelf` web service; its internal service name remains unchanged. `MANUAL_BKASH_ENABLED`, `BKASH_BUSINESS_ACCOUNT_CONFIRMED`, `COD_ENABLED`, and `COD_COURIER_CONFIRMED` are **false by default**. Remove obsolete `PAYMENT_MODE`, `SSLCOMMERZ_*`, `LIVE_PAYMENTS_*`, `MERCHANT_APPROVED` and `PAID_HOSTING_CONFIRMED` variables after release.
 
 Use a bKash **Personal Retail or Merchant** account for receiving customer payments. bKash says its [personal app is for personal use](https://www.bkash.com/en/page/terms-of-use-bkash-app), while its [Personal Retail Account](https://www.bkash.com/en/page/personal-retail-account) can receive customer payments without this store calling a payment API. Do not put a personal receiving number into checkout.
 
-In Render, set `BKASH_RECEIVE_NUMBER` to the eligible 11-digit number. Confirm its exact payment method with bKash and test it yourself. Publish real, non-sample books with PDF/EPUB files and your final Privacy, Terms, Refund and Copyright policies in Bangla and English. Then set `BKASH_BUSINESS_ACCOUNT_CONFIRMED=true` and `MANUAL_BKASH_ENABLED=true` in the Blueprint and redeploy. Keep these flags false until every check is complete; a value in Render may be reset on Blueprint sync if `render.yaml` still says false.
+In Render, set `BKASH_RECEIVE_NUMBER` to the eligible 11-digit number. Confirm its exact payment method with bKash and test it yourself. Publish real books and your final Privacy, Terms, Refund, Copyright, and Shipping policies in Bangla and English. For printed sales, set Dhaka/outside-Dhaka fees, actual on-hand stock, and a COD-capable courier arrangement. Test a controlled COD delivery. Only then set `COD_COURIER_CONFIRMED=true` and `COD_ENABLED=true`. Separately, set `BKASH_BUSINESS_ACCOUNT_CONFIRMED=true` and `MANUAL_BKASH_ENABLED=true` only after a real transfer and review test. Change flags in **both** the Blueprint and Render; Blueprint sync may reset a dashboard-only value.
 
-## 3. Verify the live flow
+## 3. Connect readandrich.com
+
+`render.yaml` adds the **root** `readandrich.com` to the existing service. In Render → service → Settings → Custom Domains, check it appears or add it there if the Blueprint has not synced. Root registration makes Render redirect `www` to the root. In Namecheap → Domain List → **Manage** → **Advanced DNS**, remove conflicting `@` A and `www` CNAME/Redirect records and `AAAA` records. Add an `A` record `@` → `216.24.57.1` and a `CNAME` record `www` → `boishelf.onrender.com`; return to Render to verify the domain and HTTPS. Follow [Render's Namecheap instructions](https://render.com/docs/configure-namecheap-dns) if the dashboard shows a different target.
+
+When HTTPS works, set Render `NEXT_PUBLIC_APP_URL=https://readandrich.com` and redeploy. In Supabase → Authentication → URL Configuration, set Site URL to `https://readandrich.com` and add any exact production callback/redirect URL used by the email template or app; retain the old Render URL temporarily during transition. In Cloudflare Turnstile, add `readandrich.com` and `www.readandrich.com` to allowed hostnames and retain the Render hostname during transition. Change the Supabase email-template subject/body to **Read and Rich** while keeping `{{ .Token }}`. Test a Gmail code end to end. See [Supabase redirect URLs](https://supabase.com/docs/guides/auth/redirect-urls) and [Turnstile hostnames](https://developers.cloudflare.com/turnstile/additional-configuration/hostname-management/).
+
+## 4. Verify the live flow
 
 Check `/api/health` and the authenticated `/api/health/ready` monitor. Sign in with a Gmail code. Create one small real order: the site must show the exact BDT amount, receiving number and order reference. Pay in bKash, submit the transaction ID and sender-number last four digits. The order must remain **under review** and the download endpoint must deny access. Compare recipient, amount, transaction ID and reference in your bKash account; approve in `/admin` → **Orders**. Only then should PDF/EPUB appear in My Library and download successfully.
 
 Also test a rejected claim and resubmission, duplicate transaction ID, a second customer, sign-out, mobile/keyboard use, and 200% zoom. Do not claim instant delivery: approval depends on you checking the transfer. Monitor the Admin queue and failed request IDs. The free Render service can sleep and has limited capacity; plan reliable hosting and backups before promising response times.
 
+Test a printed-only book, printed bundle, and ebook bundle. Confirm cart totals for Dhaka and outside Dhaka, out-of-stock rejection, order retry, cancellation/restocking, COD collection, bKash approval, and ebook bundle entitlements. Check that one customer cannot see another customer's address. Run `npm run check`, `npm run validate:render`, and targeted `npm run test:e2e`.
+
 ## Rollback
 
-Set `MANUAL_BKASH_ENABLED=false` and redeploy to stop new orders. Keep order status and Admin review available for payments already sent. Never delete the migration or existing orders to roll back application code. Restore from a tested backup only if the database itself is damaged.
+Set `COD_ENABLED=false` and `MANUAL_BKASH_ENABLED=false` in both the Blueprint and Render, then redeploy to stop new orders. Keep order status and Admin review available for payments already sent and COD orders already placed. Never delete the migration or existing orders to roll back application code. Restore from a tested backup only if the database itself is damaged.

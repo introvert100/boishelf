@@ -12,7 +12,7 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
     const id = z.uuid().parse((await params).id);
     const db = serviceClient();
     const { error } = await db.rpc("delete_unsold_book", { p_book: id });
-    if (error?.message.includes("book_has_orders")) {
+    if (error?.message.includes("book_has_orders") || error?.code === "23503") {
       const { data, error: archiveError } = await db.from("books")
         .update({ archived_at: new Date().toISOString(), published: false })
         .eq("id", id).select("id").maybeSingle();

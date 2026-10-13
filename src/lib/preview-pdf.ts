@@ -42,7 +42,7 @@ async function safeExcerpt(document: PDFDocument, pages: number, sourcePages: nu
     // Annotations may link to paid pages or contain attachments.
     page.node.delete(PDFName.of("Annots"));
   }
-  document.setTitle("BoiShelf preview");
+  document.setTitle("Read and Rich preview");
   const output = await document.save();
   if (output.length > ebookLimitBytes)
     throw new PreviewPdfError("The preview is too large. Choose fewer pages or upload a smaller sample PDF.");

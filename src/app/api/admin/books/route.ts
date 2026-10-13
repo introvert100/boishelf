@@ -28,8 +28,15 @@ export async function POST(request: Request) {
         .eq("book_id", id)
         .in("format", ["pdf", "epub"]);
       if (error) throw error;
-      if (!files.length)
-        throw new AppError(400, "Upload a PDF or EPUB before publishing.", { published: ["Upload a PDF or EPUB before publishing."] });
+      const { data: print, error: printError } = await db.from("print_editions")
+        .select("book_id").eq("book_id", id).maybeSingle();
+      if (printError) throw printError;
+      if (!files.length && !print)
+        throw new AppError(400, "Upload an ebook or add a printed edition before publishing.",
+          { published: ["Upload an ebook or add a printed edition before publishing."] });
+      if (files.length && values.price_paisa < 1000)
+        throw new AppError(400, "Set an ebook price of at least 10 BDT before publishing.",
+          { price_paisa: ["Set an ebook price of at least 10 BDT before publishing."] });
       if (!values.is_demo) {
         const { data } = await db
           .from("books")

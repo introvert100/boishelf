@@ -2469,3 +2469,46 @@ td a {
 .book-info h3 a {
   display: block;
 }
+
+/* Printed editions, bundles, delivery and order management. */
+.edition-choices { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: 14px; margin: 22px 0; }
+.edition-choice { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; padding: 20px; }
+.edition-choice h2 { margin: 0; font-size: 20px; }
+.edition-choice p { margin: 0; color: var(--muted); }
+.edition-choice strong { font-size: 22px; }
+.edition-choice .button { margin-top: auto; justify-content: center; }
+.bundle-covers { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; padding: 18px; background: #e9eee6; border-radius: 16px; width: 100%; max-width: 420px; min-height: 260px; align-items: center; justify-items: center; }
+.bundle-covers .cover { width: min(100%, 112px); height: 152px; min-width: 0; }
+.bundle-covers .cover-title { font-size: 13px; }
+.bundle-covers .cover-author { font-size: 8px; }
+.bundle-card .bundle-covers { max-width: none; }
+.bundle-card .book-info h2 { font-size: 19px; }
+.featured-bundles { padding-block: 30px 55px; }
+.cart-row { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; border-bottom: 1px solid var(--line); padding: 14px 0; }
+.cart-row > div { display: grid; gap: 4px; flex: 1; min-width: 160px; }
+.cart-row small { color: var(--muted); }
+.cart-row label { width: 100px; }
+.cart-row input[type="number"] { width: 80px; }
+.payment-choices,.bundle-member-picker { border: 1px solid var(--line); border-radius: 12px; padding: 16px; display: grid; gap: 10px; }
+.payment-choices label,.bundle-member-picker label { display: flex; align-items: center; gap: 9px; }
+.payment-choices input,.bundle-member-picker input { width: auto; }
+.order-list { display: grid; gap: 12px; }
+.order-list-item { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; justify-content: space-between; padding: 18px; }
+.order-list-item strong { flex-basis: 35%; }
+.physical-order > .panel { margin-block: 18px; }
+.physical-order .notice svg { vertical-align: middle; }
+.commerce-admin { display: grid; gap: 22px; }
+.bundle-admin-list { display: grid; gap: 4px; }
+.print-edition-editor { margin-block: 20px; }
+@media (max-width: 1100px) { .orders-link { display: none; } }
+@media (max-width: 600px) {
+  .brand { font-size: 18px; letter-spacing: -.5px; }
+  .brand-icon { flex: 0 0 30px; width: 30px; height: 30px; }
+  .header-inner { gap: 7px; }
+  .header-actions { gap: 2px; }
+  .header-actions .library-link:not(.cart-link) { display: none; }
+  .bundle-covers { min-height: 220px; }
+  .bundle-covers .cover { height: 120px; }
+  .cart-row { align-items: flex-end; }
+  .order-list-item strong { flex-basis: 100%; }
+}

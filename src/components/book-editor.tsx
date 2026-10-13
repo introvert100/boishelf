@@ -32,6 +32,9 @@ const bnErrors: Record<string, string> = {
   "Use 3–90 lowercase letters, numbers, and hyphens for the URL slug.": "URL slug-এ ৩–৯০টি ছোট হাতের ইংরেজি অক্ষর, সংখ্যা বা হাইফেন ব্যবহার করুন।",
   "Use lowercase letters, numbers, and single hyphens; start and end with a letter or number.": "URL slug-এ শুধু ছোট হাতের ইংরেজি অক্ষর, সংখ্যা ও মাঝখানে একটি হাইফেন ব্যবহার করুন।",
   "Price must be at least 10 BDT.": "মূল্য কমপক্ষে ১০ টাকা হতে হবে।",
+  "Price must be 0 for print-only or at least 10 BDT for ebooks.": "শুধু ছাপা বই হলে ইবুকের দাম ০ দিন; ইবুক থাকলে অন্তত ১০ টাকা দিন।",
+  "Upload an ebook or add a printed edition before publishing.": "প্রকাশের আগে ইবুক আপলোড করুন অথবা ছাপা সংস্করণ যোগ করুন।",
+  "Set an ebook price of at least 10 BDT before publishing.": "প্রকাশের আগে ইবুকের দাম অন্তত ১০ টাকা দিন।",
   "Price must be no more than 100,000 BDT.": "মূল্য সর্বোচ্চ ১,০০,০০০ টাকা হতে পারে।",
   "Enter a price with no more than two decimal places.": "মূল্যে দশমিকের পরে সর্বোচ্চ দুইটি সংখ্যা লিখুন।",
   "Pages must be between 1 and 20,000.": "পৃষ্ঠা সংখ্যা ১ থেকে ২০,০০০-এর মধ্যে হতে হবে।",
@@ -76,8 +79,8 @@ const bnErrors: Record<string, string> = {
   "Upload the EPUB ebook before adding a sample PDF.": "নমুনা PDF যোগ করার আগে EPUB আপলোড করুন।",
   "The file exceeds the Supabase Storage limit. Set the ebooks bucket limit to 50 MB in Supabase Storage settings.": "ফাইলটি Supabase Storage-এর সীমা ছাড়িয়েছে। Storage settings-এ ebooks bucket-এর সীমা ৫০ MB করুন।",
   "Supabase rejected this file type. Check that the private ebook bucket accepts PDF and EPUB.": "Supabase ফাইলের ধরন গ্রহণ করেনি। ব্যক্তিগত ebooks bucket-এ PDF ও EPUB অনুমোদিত আছে কি না দেখুন।",
-  "The book upload database function is missing. Apply the latest BoiShelf migration in Supabase, then retry.": "বই আপলোডের ডেটাবেস ফাংশন নেই। Supabase-এ সর্বশেষ BoiShelf migration প্রয়োগ করে আবার চেষ্টা করুন।",
-  "The database still has the 30 MB ebook limit. Apply the new BoiShelf migration in Supabase, then retry.": "ডেটাবেসে এখনও ৩০ MB সীমা আছে। Supabase-এ নতুন BoiShelf migration চালিয়ে আবার চেষ্টা করুন।",
+  "The book upload database function is missing. Apply the latest Read and Rich migration in Supabase, then retry.": "বই আপলোডের ডেটাবেস ফাংশন নেই। Supabase-এ সর্বশেষ Read and Rich migration প্রয়োগ করে আবার চেষ্টা করুন।",
+  "The database still has the 30 MB ebook limit. Apply the new Read and Rich migration in Supabase, then retry.": "ডেটাবেসে এখনও ৩০ MB সীমা আছে। Supabase-এ নতুন Read and Rich migration চালিয়ে আবার চেষ্টা করুন।",
   "Check the upload details. PDF and EPUB files must be between 1 byte and 50 MB.": "আপলোডের তথ্য পরীক্ষা করুন। PDF ও EPUB ফাইল ১ বাইট থেকে ৫০ MB-এর মধ্যে হতে হবে।",
   "Supabase Storage could not save or read this file. Check the private bucket, its size limit, and Storage logs.": "Supabase Storage ফাইল সংরক্ষণ বা পড়তে পারেনি। ব্যক্তিগত bucket, ফাইলের সীমা ও Storage logs দেখুন।",
   "The file reached Storage, but the book record could not be updated. Check Supabase database logs.": "ফাইল Storage-এ পৌঁছেছে, কিন্তু বইয়ের তথ্য সংরক্ষণ হয়নি। Supabase database logs দেখুন।",
@@ -192,8 +195,8 @@ export function BookEditor({
       });
     return () => controller.abort();
   }, [book?.id, hasPdf]);
-  const missingPublicationFile = !hasEbook
-    ? "Upload a PDF or EPUB before publishing."
+  const missingPublicationFile = !hasEbook && book?.print_price_paisa == null
+    ? "Upload an ebook or add a printed edition before publishing."
     : !values.is_demo && !hasCover
       ? "Upload a cover before publishing a real book."
       : null;
@@ -208,8 +211,8 @@ export function BookEditor({
     if (maximum) return `শেষ পৃষ্ঠাটি ক্রেতাদের জন্য রাখতে সর্বোচ্চ ${maximum[1]} পৃষ্ঠা প্রিভিউ দিন।${suffix}`;
     const sample = /^This sample PDF has only (\d+) pages\.$/.exec(base);
     if (sample) return `নমুনা PDF-এ মাত্র ${sample[1]} পৃষ্ঠা আছে।${suffix}`;
-    const bucketLimit = /^The ebooks bucket currently allows only (\d+) MB\. Apply the new BoiShelf migration in Supabase before retrying\.$/.exec(base);
-    if (bucketLimit) return `ebooks bucket-এ এখন সর্বোচ্চ ${bucketLimit[1]} MB ফাইল নেওয়া যায়। Supabase-এ নতুন BoiShelf migration চালিয়ে আবার চেষ্টা করুন।${suffix}`;
+    const bucketLimit = /^The ebooks bucket currently allows only (\d+) MB\. Apply the new Read and Rich migration in Supabase before retrying\.$/.exec(base);
+    if (bucketLimit) return `ebooks bucket-এ এখন সর্বোচ্চ ${bucketLimit[1]} MB ফাইল নেওয়া যায়। Supabase-এ নতুন Read and Rich migration চালিয়ে আবার চেষ্টা করুন।${suffix}`;
     const interrupted = /^Direct upload was interrupted(?: \(HTTP (\d+)\))?\. Check your connection and retry\.$/.exec(base);
     if (interrupted) return `সরাসরি আপলোডে বাধা এসেছে${interrupted[1] ? ` (HTTP ${interrupted[1]})` : ""}। সংযোগ পরীক্ষা করে আবার চেষ্টা করুন।${storageCode}${suffix}`;
     return `${bnErrors[base] || base}${storageCode}${suffix}`;
@@ -460,7 +463,7 @@ export function BookEditor({
         {input("author_bn", "লেখক (বাংলা)")}
         {input("author_en", "Author (English)")}
         {input("slug", "URL slug", t("যেমন: amar-boi। শুধু ছোট হাতের ইংরেজি অক্ষর, সংখ্যা ও হাইফেন।", "Example: my-book. Use lowercase letters, numbers, and hyphens."))}
-        {input("price", t("মূল্য (টাকা)", "Price (BDT)"), t("১০ থেকে ১,০০,০০০ টাকা; দশমিকের পরে সর্বোচ্চ ২ সংখ্যা।", "10–100,000 BDT; up to two decimal places."))}
+        {input("price", t("ইবুকের মূল্য (টাকা)", "Ebook price (BDT)"), t("শুধু ছাপা বই হলে ০ দিন। ইবুক থাকলে ১০ থেকে ১,০০,০০০ টাকা।", "Enter 0 for print-only; ebooks cost 10–100,000 BDT."))}
         {select("category", t("বিভাগ", "Category"), categories.filter((x) => x.id !== "all").map((x) => ({ value: x.id, label: x[locale] })))}
         {select("language", t("ভাষা", "Language"), [{ value: "bn", label: "বাংলা" }, { value: "en", label: "English" }])}
         {input("pages", t("পৃষ্ঠা", "Pages"), hasPdf
@@ -481,7 +484,7 @@ export function BookEditor({
         <label className="checkbox"><input type="checkbox" name="is_demo" checked={values.is_demo} onChange={(e) => change("is_demo", e.target.checked)} />{t("নমুনা বই", "Sample book")}</label>
         <label className="checkbox"><input type="checkbox" name="featured" checked={values.featured} onChange={(e) => change("featured", e.target.checked)} />{t("বিশেষ বাছাই", "Featured")}</label>
       </div>
-      <p id="published-help" className="field-help">{book ? t("প্রকাশ করতে PDF অথবা EPUB লাগবে। নমুনা নয় এমন বইয়ে প্রচ্ছদও লাগবে।", "Publishing needs a PDF or EPUB. Non-sample books also need a cover.") : t("প্রথমে খসড়া সংরক্ষণ করুন, তারপর ফাইল আপলোড করে প্রকাশ করুন।", "Save a draft first, then upload files and publish.")}</p>
+      <p id="published-help" className="field-help">{book ? t("প্রকাশ করতে ইবুক ফাইল অথবা ছাপা সংস্করণ লাগবে। নমুনা নয় এমন বইয়ে প্রচ্ছদও লাগবে।", "Publishing needs an ebook file or a printed edition. Non-sample books also need a cover.") : t("প্রথমে খসড়া সংরক্ষণ করুন, তারপর ফাইল বা ছাপা সংস্করণ যোগ করে প্রকাশ করুন।", "Save a draft, then add files or a printed edition before publishing.")}</p>
       {book && <ul className="publish-checklist" aria-label={t("প্রকাশের প্রস্তুতি", "Publishing requirements")}>
         <li>{hasEbook ? "✓" : "○"} {t("PDF অথবা EPUB আপলোড", "PDF or EPUB uploaded")}</li>
         <li>{values.is_demo || hasCover ? "✓" : "○"} {values.is_demo ? t("নমুনা বইয়ের জন্য প্রচ্ছদ ঐচ্ছিক", "Cover optional for sample book") : t("প্রচ্ছদ আপলোড", "Cover uploaded")}</li>

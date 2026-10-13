@@ -12,9 +12,10 @@ import {
 } from "lucide-react";
 import { useLanguage, Price, statusLabel } from "./store";
 import { BookEditor } from "./book-editor";
+import { CommerceAdmin, PrintEditionEditor } from "./commerce-admin";
 import { SuccessToast, type ToastMessage } from "./success-toast";
 import { draftKey, parseBookDraft, type BookFormValues } from "@/lib/book-draft";
-import type { Book, Order, Policy, ReviewClaim } from "@/lib/types";
+import type { Book, Bundle, Order, OrderLine, OrderShipping, Policy, ReviewClaim } from "@/lib/types";
 type Gate = { key: string; label: string; passed: boolean };
 export function Admin({
   books,
@@ -24,6 +25,10 @@ export function Admin({
   gates,
   ownerId,
   cleanupPending,
+  bundles,
+  physicalOrders,
+  shipping,
+  physicalGates,
 }: {
   books: Book[];
   orders: Order[];
@@ -32,6 +37,10 @@ export function Admin({
   gates: Gate[];
   ownerId: string;
   cleanupPending: number;
+  bundles: Bundle[];
+  physicalOrders: (Order & { order_shipping: OrderShipping | OrderShipping[] | null; order_items: OrderLine[] })[];
+  shipping: { dhaka_paisa: number | null; outside_paisa: number | null };
+  physicalGates: Gate[];
 }) {
   const { t, locale } = useLanguage();
   const router = useRouter();
@@ -215,6 +224,7 @@ export function Admin({
           ["books", "বই", "Books"],
           ["archived", "আর্কাইভ", "Archived"],
           ["orders", `অর্ডার (${claims.filter((claim) => !resolvedClaims.includes(claim.id)).length})`, `Orders (${claims.filter((claim) => !resolvedClaims.includes(claim.id)).length})`],
+          ["commerce", "ছাপা বই ও বান্ডেল", "Print, bundles & delivery"],
           ["policies", "নীতিমালা", "Policies"],
           ["launch", "প্রকাশের প্রস্তুতি", "Launch readiness"],
         ].map(([id, bn, en]) => (
@@ -292,6 +302,9 @@ export function Admin({
                 author_bn: values.author_bn, author_en: values.author_en,
                 description_bn: values.description_bn, description_en: values.description_en,
                 category: values.category, price_paisa: Math.round(Number(values.price) * 100),
+                print_price_paisa: existing?.print_price_paisa ?? null,
+                print_on_hand: existing?.print_on_hand || 0,
+                print_reserved: existing?.print_reserved || 0,
                 pages: Number(values.pages), language: values.language,
                 cover_style: values.cover_style, cover_path: existing?.cover_path || null,
                 formats: existing?.formats || [], format_names: existing?.format_names,
@@ -314,6 +327,15 @@ export function Admin({
               });
             }}
           />}
+          {editing && editing !== "new" && (recentBook?.id === editing ? recentBook : books.find((book) => book.id === editing)) && <PrintEditionEditor
+            key={`print-${editing}`}
+            book={(recentBook?.id === editing ? recentBook : books.find((book) => book.id === editing))!}
+            onSuccess={showToast}
+            onSaved={(price, stock) => setRecentBook((current) => {
+              const existing = current?.id === editing ? current : books.find((book) => book.id === editing);
+              return existing ? { ...existing, print_price_paisa: price, print_on_hand: stock } : current;
+            })}
+          />}
           <div className="table-wrap">
             <table>
               <thead>
@@ -333,7 +355,7 @@ export function Admin({
                       {book.is_demo && " · Sample"}
                     </td>
                     <td>
-                      <Price paisa={book.price_paisa} />
+                      {book.formats.length ? <Price paisa={book.price_paisa} /> : book.print_price_paisa != null ? <Price paisa={book.print_price_paisa} /> : "—"}
                     </td>
                     <td>
                       {book.published ? t("হ্যাঁ", "Yes") : t("খসড়া", "Draft")}
@@ -368,6 +390,8 @@ export function Admin({
           <td><button type="button" className="button secondary" disabled={busy} onClick={() => void restoreBook(book)}><RotateCcw size={16} /> {t("খসড়ায় ফিরিয়ে আনুন", "Restore as draft")}</button></td>
         </tr>)}</tbody></table>}
       </div>}
+      {tab === "commerce" && <CommerceAdmin books={displayBooks} bundles={bundles}
+        physicalOrders={physicalOrders} shipping={shipping} onSuccess={showToast} />}
       {tab === "orders" && (
         <>
           <p>
@@ -417,7 +441,7 @@ export function Admin({
                   <tr key={o.id}>
                     <td>{o.tran_id}</td>
                     <td>{o.book_title}</td>
-                    <td>{o.payment_method === "bkash_manual" ? "bKash" : "Legacy test"}</td>
+                    <td>{o.payment_method === "bkash_manual" ? "bKash" : o.payment_method === "cod" ? "COD" : "Legacy test"}</td>
                     <td>
                       <Price paisa={o.amount_paisa} />
                     </td>
@@ -442,7 +466,7 @@ export function Admin({
               "Add and publish your final policies in both languages. No legal text is generated for you.",
             )}
           </div>
-          {["privacy", "terms", "refund", "copyright"].map((slug) => {
+          {["privacy", "terms", "refund", "copyright", "shipping"].map((slug) => {
             const p = policies.find((x) => x.slug === slug);
             return (
               <form
@@ -510,6 +534,11 @@ export function Admin({
               <li key={g.key} className={g.passed ? "passed" : "missing"}>
                 {g.passed ? <CheckCircle2 size={20} /> : <Circle size={20} />}{" "}
                 {g.label}
+              </li>
+            ))}
+            {physicalGates.map((g) => (
+              <li key={`physical-${g.key}`} className={g.passed ? "passed" : "missing"}>
+                {g.passed ? <CheckCircle2 size={20} /> : <Circle size={20} />} {g.label}
               </li>
             ))}
           </ul>

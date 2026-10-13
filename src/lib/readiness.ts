@@ -14,7 +14,7 @@ export async function readiness() {
         .eq("is_demo", false).is("archived_at", null).limit(100),
     ]);
     if (pe || be) throw pe || be;
-    policies = policySlugs.every((slug) =>
+    policies = policySlugs.filter((slug) => slug !== "shipping").every((slug) =>
       p?.some((x) => x.slug === slug && x.body_bn.trim() && x.body_en.trim()));
     realCatalogue = !!b?.some((x) => x.book_formats.length > 0);
   }

@@ -58,9 +58,9 @@ export function uploadFailure(error: unknown, stage: string, kind?: string) {
   else if (status === 400 && /mime|content.type/i.test(raw?.message || ""))
     problem = new AppError(400, "Supabase rejected this file type. Check that the private ebook bucket accepts PDF and EPUB.");
   else if (code === "PGRST202" || /Could not find the function/i.test(raw?.message || ""))
-    problem = new AppError(503, "The book upload database function is missing. Apply the latest BoiShelf migration in Supabase, then retry.");
+    problem = new AppError(503, "The book upload database function is missing. Apply the latest Read and Rich migration in Supabase, then retry.");
   else if (code === "23514" && /book_formats_size_bytes_check/.test(raw?.message || ""))
-    problem = new AppError(503, "The database still has the 30 MB ebook limit. Apply the new BoiShelf migration in Supabase, then retry.");
+    problem = new AppError(503, "The database still has the 30 MB ebook limit. Apply the new Read and Rich migration in Supabase, then retry.");
   else if (stage === "storage_upload" || stage === "storage_read")
     problem = new AppError(503, "Supabase Storage could not save or read this file. Check the private bucket, its size limit, and Storage logs.");
   else if (stage === "database_save")

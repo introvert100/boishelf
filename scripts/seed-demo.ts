@@ -11,7 +11,7 @@ const db = createClient(url, key, { auth: { persistSession: false } });
 function pdf(title: string) {
   const lines = [
     title,
-    "An original BoiShelf sample",
+    "An original Read and Rich sample",
     "",
     "A small invitation to read",
     "",
@@ -20,10 +20,10 @@ function pdf(title: string) {
     "different perspective. You do not need to finish a chapter today.",
     "One thoughtful page can be enough to start a new habit.",
     "",
-    "This sample is created for the BoiShelf pilot. It demonstrates the",
+    "This sample is created for the Read and Rich pilot. It demonstrates the",
     "purchase and download experience. It is not a full commercial book.",
     "",
-    "Thank you for visiting BoiShelf. Happy reading.",
+    "Thank you for visiting Read and Rich. Happy reading.",
   ];
   const escape = (s: string) => s.replace(/[\\()]/g, "\\$&");
   const stream = `BT /F1 13 Tf 50 760 Td 20 TL ${lines.map((l, i) => `${i ? "T* " : ""}(${escape(l)}) Tj`).join("\n")} ET`;
@@ -56,13 +56,13 @@ function epub(title: string, id: string) {
         '<?xml version="1.0"?><container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container"><rootfiles><rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/></rootfiles></container>',
       ),
       "OEBPS/content.opf": strToU8(
-        `<?xml version="1.0"?><package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="id"><metadata xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:identifier id="id">urn:uuid:${id}</dc:identifier><dc:title>${esc(title)}</dc:title><dc:language>en</dc:language><dc:creator>BoiShelf Editorial</dc:creator><meta property="dcterms:modified">2026-10-02T00:00:00Z</meta></metadata><manifest><item id="chapter" href="chapter.xhtml" media-type="application/xhtml+xml"/><item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/></manifest><spine><itemref idref="chapter"/></spine></package>`,
+        `<?xml version="1.0"?><package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="id"><metadata xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:identifier id="id">urn:uuid:${id}</dc:identifier><dc:title>${esc(title)}</dc:title><dc:language>en</dc:language><dc:creator>Read and Rich Editorial</dc:creator><meta property="dcterms:modified">2026-10-02T00:00:00Z</meta></metadata><manifest><item id="chapter" href="chapter.xhtml" media-type="application/xhtml+xml"/><item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/></manifest><spine><itemref idref="chapter"/></spine></package>`,
       ),
       "OEBPS/nav.xhtml": strToU8(
         '<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops"><head><title>Contents</title></head><body><nav epub:type="toc"><h1>Contents</h1><ol><li><a href="chapter.xhtml">A small invitation to read</a></li></ol></nav></body></html>',
       ),
       "OEBPS/chapter.xhtml": strToU8(
-        `<html xmlns="http://www.w3.org/1999/xhtml"><head><title>${esc(title)}</title></head><body><h1>${esc(title)}</h1><p>An original BoiShelf sample.</p><h2>A small invitation to read</h2><p>A book can begin with a quiet moment. Set aside your phone, find a comfortable place, and give yourself a few minutes to discover a different perspective. You do not need to finish a chapter today. One thoughtful page can be enough to start a new habit.</p><p>This original sample demonstrates the BoiShelf pilot purchase and download experience. It is not a full commercial book.</p><p>Happy reading.</p></body></html>`,
+        `<html xmlns="http://www.w3.org/1999/xhtml"><head><title>${esc(title)}</title></head><body><h1>${esc(title)}</h1><p>An original Read and Rich sample.</p><h2>A small invitation to read</h2><p>A book can begin with a quiet moment. Set aside your phone, find a comfortable place, and give yourself a few minutes to discover a different perspective. You do not need to finish a chapter today. One thoughtful page can be enough to start a new habit.</p><p>This original sample demonstrates the Read and Rich pilot purchase and download experience. It is not a full commercial book.</p><p>Happy reading.</p></body></html>`,
       ),
     },
     { level: 6 },

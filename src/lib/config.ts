@@ -28,3 +28,7 @@ export function manualCheckoutEnabled() {
   return process.env.MANUAL_BKASH_ENABLED === "true" &&
     process.env.BKASH_BUSINESS_ACCOUNT_CONFIRMED === "true";
 }
+export function codCheckoutEnabled() {
+  return process.env.COD_ENABLED === "true" &&
+    process.env.COD_COURIER_CONFIRMED === "true";
+}

@@ -38,6 +38,20 @@ test("search empty state and category reset", async ({ page }) => {
   await page.getByRole("button", { name: "Show all books" }).click();
   await expect(page.locator(".book-card")).toHaveCount(8);
 });
+test("Read and Rich branding, empty cart, bundles, and orders navigation are clear", async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+  await expect(page).toHaveTitle(/Read and Rich/);
+  await page.getByRole("button", { name: "Switch to English" }).click();
+  await page.getByRole("link", { name: "Bundles" }).first().click();
+  await expect(page.getByRole("heading", { name: "Book bundles" })).toBeVisible();
+  await expect(page.getByText("No bundles are published yet.")).toBeVisible();
+  await page.goto("/cart");
+  await expect(page.getByRole("heading", { name: "Printed-book cart" })).toBeVisible();
+  await expect(page.getByText("Your printed-book cart is empty.")).toBeVisible();
+  await page.goto("/orders");
+  await expect(page).toHaveURL(/\/signin\?next=(?:%2F|\/)orders/);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 2)).toBe(true);
+});
 test("unconfigured authentication and admin routes stay closed", async ({
   page,
   request,
@@ -96,6 +110,11 @@ test("unconfigured authentication and admin routes stay closed", async ({
   expect((await request.post(`/api/orders/${id}/claim`, {
     headers: { Origin: "http://localhost:3000" }, data: { transactionId: "ABC123456", senderLast4: "1234" },
   })).status()).toBe(401);
+  for (const path of ["/api/checkout/physical", "/api/checkout/bundle", "/api/physical/quote",
+    "/api/admin/bundles", "/api/admin/shipping", `/api/admin/physical-orders/${id}`,
+    `/api/admin/print-editions/${id}`, `/api/orders/${id}/cancel`]) {
+    expect((await request.post(path, { headers: { Origin: "http://localhost:3000" }, data: {} })).status()).toBe(401);
+  }
   expect((await request.get(`/api/previews/${id}`)).status()).toBe(503);
   expect(
     (

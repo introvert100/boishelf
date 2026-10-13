@@ -13,6 +13,9 @@ export type Book = {
   description_en: string;
   category: string;
   price_paisa: number;
+  print_price_paisa?: number | null;
+  print_on_hand?: number;
+  print_reserved?: number;
   pages: number;
   language: string;
   cover_path: string | null;
@@ -32,15 +35,52 @@ export type Viewer = { email: string; name: string; admin: boolean } | null;
 export type Order = {
   id: string;
   user_id: string;
-  book_id: string;
+  book_id: string | null;
   book_title: string;
   amount_paisa: number;
   mode: PaymentMode;
-  payment_method: "sslcommerz" | "bkash_manual";
+  payment_method: "sslcommerz" | "bkash_manual" | "cod";
+  order_kind?: "ebook" | "ebook_bundle" | "physical";
   manual_receive_number: string | null;
   status: OrderStatus;
   tran_id: string;
   created_at: string;
+};
+export type Bundle = {
+  id: string;
+  slug: string;
+  kind: "ebook" | "physical";
+  title_bn: string;
+  title_en: string;
+  description_bn: string;
+  description_en: string;
+  price_paisa: number;
+  published: boolean;
+  archived_at: string | null;
+  members: Book[];
+};
+export type CartLine = { kind: "book" | "bundle"; id: string; quantity: number };
+export type OrderLine = {
+  id: string;
+  item_type: "book" | "bundle";
+  title_bn: string;
+  title_en: string;
+  format: "ebook" | "physical";
+  quantity: number;
+  unit_price_paisa: number;
+};
+export type OrderShipping = {
+  recipient_name: string;
+  phone: string;
+  district: string;
+  local_area: string;
+  street_address: string;
+  shipping_fee_paisa: number;
+  fulfillment_status: "placed" | "shipped" | "delivered" | "cancelled" | "returned";
+  delivery_target: string | null;
+  courier_name: string | null;
+  tracking_number: string | null;
+  refund_due: boolean;
 };
 export type ManualClaim = {
   id: string;
@@ -61,4 +101,4 @@ export type Policy = {
   body_bn: string;
   published: boolean;
 };
-export const policySlugs = ["privacy", "terms", "refund", "copyright"] as const;
+export const policySlugs = ["privacy", "terms", "refund", "copyright", "shipping"] as const;

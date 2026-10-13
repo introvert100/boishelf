@@ -9,6 +9,8 @@ services:
     buildCommand: npm ci && npm run build
     startCommand: npm start
     healthCheckPath: /api/health
+    domains:
+      - readandrich.com
     autoDeployTrigger: checksPass
     envVars:
       - key: NODE_VERSION
@@ -32,6 +34,10 @@ services:
       - key: BKASH_BUSINESS_ACCOUNT_CONFIRMED
         value: "false"
       - key: MANUAL_BKASH_ENABLED
+        value: "false"
+      - key: COD_COURIER_CONFIRMED
+        value: "false"
+      - key: COD_ENABLED
         value: "false"
       - key: MONITOR_TOKEN
         generateValue: true
