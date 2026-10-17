@@ -46,10 +46,13 @@ export type Order = {
   tran_id: string;
   created_at: string;
 };
+export type EditionFormat = "ebook" | "physical";
+export type BundleKind = EditionFormat | "mixed";
+export type BundleMember = Book & { bundle_format: EditionFormat };
 export type Bundle = {
   id: string;
   slug: string;
-  kind: "ebook" | "physical";
+  kind: BundleKind;
   title_bn: string;
   title_en: string;
   description_bn: string;
@@ -57,7 +60,7 @@ export type Bundle = {
   price_paisa: number;
   published: boolean;
   archived_at: string | null;
-  members: Book[];
+  members: BundleMember[];
 };
 export type CartLine = { kind: "book" | "bundle"; id: string; quantity: number };
 export type OrderLine = {
@@ -65,7 +68,8 @@ export type OrderLine = {
   item_type: "book" | "bundle";
   title_bn: string;
   title_en: string;
-  format: "ebook" | "physical";
+  format: BundleKind;
+  order_item_members?: { book_id: string; title_bn: string; title_en: string; format: EditionFormat }[];
   quantity: number;
   unit_price_paisa: number;
 };

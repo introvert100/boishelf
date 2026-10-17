@@ -1,5 +1,5 @@
 "use client";
-import Link from "next/link";
+import Link, { NavigationProvider } from "./navigation";
 import {
   createContext,
   useContext,
@@ -91,6 +91,7 @@ export function Shell({
   }
   return (
     <Language.Provider value={{ locale, t }}>
+      <NavigationProvider label={t("পাতা লোড হচ্ছে…", "Loading page…")}>
       <a className="skip" href="#main">
         {t("মূল বিষয়বস্তুতে যান", "Skip to content")}
       </a>
@@ -241,6 +242,7 @@ export function Shell({
           </div>
         )}
       </footer>
+      </NavigationProvider>
     </Language.Provider>
   );
 }
@@ -662,11 +664,9 @@ export function BookDetail({ book }: { book: Book }) {
 
 export function SignIn({
   configured,
-  returnTo,
   error,
 }: {
   configured: boolean;
-  returnTo: string;
   error?: string;
 }) {
   const { t } = useLanguage();
@@ -762,7 +762,9 @@ export function SignIn({
       setMessage("code");
       return;
     }
-    window.location.assign(returnTo);
+    // A full navigation reads the freshly saved SSR cookies and starts at the
+    // top of the storefront, even when sign-in began on a protected route.
+    window.location.replace("/");
   }
 
   return (

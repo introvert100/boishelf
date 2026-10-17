@@ -12,6 +12,7 @@
     "typecheck": "tsc --noEmit",
     "test": "tsx --test tests/*.test.ts",
     "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --config playwright.ui.config.ts",
     "check": "npm run typecheck && npm test && npm run build",
     "db:test": "tsx --test tests/database.test.ts",
     "validate:render": "node scripts/validate-render.mjs",

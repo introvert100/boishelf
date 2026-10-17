@@ -27,7 +27,7 @@ export default async function Page({
       { data: latestClaim, error: claimError }] = await Promise.all([
       serviceClient().from("order_shipping").select("*").eq("order_id", id).single(),
       serviceClient().from("order_items")
-        .select("id,item_type,title_bn,title_en,format,quantity,unit_price_paisa")
+        .select("id,item_type,title_bn,title_en,format,quantity,unit_price_paisa,order_item_members(book_id,title_bn,title_en,format)")
         .eq("order_id", id),
       serviceClient().from("manual_payment_claims")
         .select("status,rejection_reason").eq("order_id", id)

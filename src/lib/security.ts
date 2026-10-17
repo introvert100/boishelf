@@ -22,13 +22,13 @@ export function safeReturnTo(value: string | null): string {
     value.startsWith("//") ||
     /[\\\r\n]/.test(value)
   )
-    return "/library";
+    return "/";
   try {
     const u = new URL(value, "https://boishelf.invalid");
     return u.origin === "https://boishelf.invalid"
       ? u.pathname + u.search
-      : "/library";
+      : "/";
   } catch {
-    return "/library";
+    return "/";
   }
 }

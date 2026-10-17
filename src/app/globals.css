@@ -2500,6 +2500,28 @@ td a {
 .commerce-admin { display: grid; gap: 22px; }
 .bundle-admin-list { display: grid; gap: 4px; }
 .print-edition-editor { margin-block: 20px; }
+.navigation-feedback { position: fixed; inset: 0 0 auto; z-index: 1000; pointer-events: none; }
+.navigation-progress { height: 4px; background: var(--green, #17654f); transform-origin: left; animation: navigation-progress 1.6s ease-in-out infinite; }
+.navigation-feedback > span { display: flex; align-items: center; gap: 9px; width: fit-content; max-width: calc(100% - 32px); margin: 12px auto; padding: 10px 16px; border: 1px solid var(--line); border-radius: 24px; background: white; color: #17654f; box-shadow: 0 4px 18px #17372d20; }
+.navigation-feedback svg,.page-loading svg { animation: navigation-spin 1s linear infinite; flex-shrink: 0; }
+.page-loading { min-height: 55vh; }
+.page-loading > p { display: flex; align-items: center; gap: 12px; }
+.loading-skeleton { display: grid; gap: 16px; margin-top: 24px; }
+.loading-skeleton span { height: 70px; background: #edf2ed; border-radius: 12px; animation: navigation-pulse 1.5s ease-in-out infinite; }
+.loading-skeleton span:nth-child(2) { width: 85%; }
+.loading-skeleton span:nth-child(3) { width: 65%; }
+.bundle-member-row { padding: 12px; border: 1px solid var(--line); border-radius: 10px; display: grid; gap: 8px; }
+.bundle-member-row label { justify-content: flex-start; }
+.bundle-member-row > label:first-child,.payment-choices label { flex-direction: row; justify-content: flex-start; }
+.bundle-member-row input[type="checkbox"] { flex: 0 0 18px; width: 18px; height: 18px; margin: 0; }
+.bundle-member-row > label:not(:first-child) { flex-direction: column; align-items: flex-start; }
+.bundle-member-row { min-width: 0; overflow-wrap: anywhere; }
+.bundle-member-row small { color: var(--muted); }
+.bundle-member-row select { width: 100%; }
+.bundle-member-row.unavailable { background: #f7f8f6; }
+@keyframes navigation-spin { to { transform: rotate(360deg); } }
+@keyframes navigation-progress { 0% { transform: scaleX(.08); } 65% { transform: scaleX(.8); } 100% { transform: scaleX(.96); opacity: .4; } }
+@keyframes navigation-pulse { 50% { opacity: .45; } }
 @media (max-width: 1100px) { .orders-link { display: none; } }
 @media (max-width: 600px) {
   .brand { font-size: 18px; letter-spacing: -.5px; }

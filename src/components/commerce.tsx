@@ -1,10 +1,11 @@
 "use client";
-import Link from "next/link";
+import Link from "./navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { BookOpen, Package, ShoppingCart, Truck } from "lucide-react";
 import { addToCart, readCart, saveCart } from "@/lib/cart";
 import { districts } from "@/lib/commerce-validation";
+import { printedBundleMembers } from "@/lib/bundle-selection";
 import type { Book, Bundle, CartLine, Order, OrderLine, OrderShipping, Viewer } from "@/lib/types";
 import { Cover, Price, statusLabel, useLanguage } from "./store";
 
@@ -25,7 +26,7 @@ export function FeaturedBundles({ bundles }: { bundles: Bundle[] }) {
       <Link className="button secondary" href="/bundles">{t("সব বান্ডেল", "All bundles")}</Link></div>
     <div className="book-grid">{bundles.slice(0, 3).map((bundle) => <article className="book-card bundle-card" key={bundle.id}>
       <Link href={`/bundles/${bundle.slug}`}><BundleCovers bundle={bundle} /></Link>
-      <div className="book-info"><small>{bundle.kind === "physical" ? t("ছাপা বই", "Printed") : t("ইবুক", "Ebook")}</small>
+      <div className="book-info"><small>{bundle.kind === "mixed" ? t("ছাপা + ইবুক", "Printed + ebooks") : bundle.kind === "physical" ? t("ছাপা বই", "Printed") : t("ইবুক", "Ebook")}</small>
         <h3><Link href={`/bundles/${bundle.slug}`}>{title(bundle, locale)}</Link></h3>
         <strong><Price paisa={bundle.price_paisa} /></strong></div>
     </article>)}</div>
@@ -36,11 +37,11 @@ export function BundleList({ bundles }: { bundles: Bundle[] }) {
   return <div className="container page">
     <span className="eyebrow muted">READ AND RICH</span>
     <h1>{t("বইয়ের বান্ডেল", "Book bundles")}</h1>
-    <p>{t("একসঙ্গে বাছাই করা বই, একটি দামে। ইবুক ও ছাপা বইয়ের বান্ডেল আলাদা।",
-      "Curated books together at one price. Ebook and printed bundles are separate.")}</p>
+    <p>{t("এক দামে বাছাই করা বই। শুধু ইবুক, শুধু ছাপা বা দুই ধরনের মিশ্র বান্ডেল বাছুন।",
+      "Curated books at one price. Choose ebooks, printed books, or a mixed bundle.")}</p>
     {bundles.length ? <div className="book-grid">{bundles.map((bundle) => <article className="book-card bundle-card" key={bundle.id}>
       <Link href={`/bundles/${bundle.slug}`}><BundleCovers bundle={bundle} /></Link>
-      <div className="book-info"><small>{bundle.kind === "physical" ? t("ছাপা বই", "Printed books") : t("ইবুক", "Ebooks")}</small>
+      <div className="book-info"><small>{bundle.kind === "mixed" ? t("ছাপা + ইবুক", "Printed + ebooks") : bundle.kind === "physical" ? t("ছাপা বই", "Printed books") : t("ইবুক", "Ebooks")}</small>
         <h2><Link href={`/bundles/${bundle.slug}`}>{title(bundle, locale)}</Link></h2>
         <p>{bundle.members.length} {t("টি বই", "books")}</p>
         <strong><Price paisa={bundle.price_paisa} /></strong>
@@ -55,8 +56,8 @@ export function BundleDetail({ bundle, viewer, ebookReady }: { bundle: Bundle; v
   const [error, setError] = useState("");
   const [accepted, setAccepted] = useState(false);
   const individualTotal = bundle.members.reduce((sum, member) => sum +
-    (bundle.kind === "ebook" ? member.price_paisa : member.print_price_paisa || 0), 0);
-  const physicalAvailable = bundle.members.every((book) =>
+    (member.bundle_format === "ebook" ? member.price_paisa : member.print_price_paisa || 0), 0);
+  const physicalAvailable = printedBundleMembers(bundle).every((book) =>
     book.print_price_paisa != null && (book.print_on_hand || 0) - (book.print_reserved || 0) > 0);
   async function buyEbook() {
     if (busy) return;
@@ -79,7 +80,7 @@ export function BundleDetail({ bundle, viewer, ebookReady }: { bundle: Bundle; v
     <section className="book-detail">
       <BundleCovers bundle={bundle} />
       <div className="detail-copy">
-        <span className="eyebrow muted">{bundle.kind === "physical" ? t("ছাপা বইয়ের বান্ডেল", "PRINTED BUNDLE") : t("ইবুক বান্ডেল", "EBOOK BUNDLE")}</span>
+        <span className="eyebrow muted">{bundle.kind === "mixed" ? t("ছাপা + ইবুক বান্ডেল", "MIXED BUNDLE") : bundle.kind === "physical" ? t("ছাপা বইয়ের বান্ডেল", "PRINTED BUNDLE") : t("ইবুক বান্ডেল", "EBOOK BUNDLE")}</span>
         <h1>{title(bundle, locale)}</h1>
         <p className="description">{locale === "bn" ? bundle.description_bn : bundle.description_en}</p>
         <div className="detail-price"><Price paisa={bundle.price_paisa} /></div>
@@ -87,10 +88,11 @@ export function BundleDetail({ bundle, viewer, ebookReady }: { bundle: Bundle; v
           {t("আলাদা কিনলে", "Bought separately")}: <Price paisa={individualTotal} /> · {t("সাশ্রয়", "Save")}: <Price paisa={individualTotal - bundle.price_paisa} />
         </p>}
         <h2>{t("বান্ডেলে থাকছে", "Included books")}</h2>
-        <ul>{bundle.members.map((book) => <li key={book.id}><Link href={`/books/${book.slug}`}>{title(book, locale)}</Link></li>)}</ul>
-        {bundle.kind === "physical" ? <>
+        <ul>{bundle.members.map((book) => <li key={book.id}><Link href={`/books/${book.slug}`}>{title(book, locale)}</Link> · {book.bundle_format === "physical" ? t("ছাপা", "Printed") : t("ইবুক", "Ebook")}</li>)}</ul>
+        {bundle.kind !== "ebook" ? <>
           {!physicalAvailable && <p className="notice">{t("একটি বই মজুতে নেই।", "A book in this bundle is out of stock.")}</p>}
-          <button className="button wide" disabled={!physicalAvailable} onClick={addPhysical}><ShoppingCart size={18} /> {t("কার্টে যোগ করুন", "Add printed bundle to cart")}</button>
+          {bundle.kind === "mixed" && <p className="notice">{t("ছাপা বই কুরিয়ারে আসবে। bKash যাচাই বা COD-এর টাকা পাওয়া নিশ্চিত হলে ইবুক লাইব্রেরিতে খুলবে।", "Printed books ship by courier. Ebooks unlock after bKash approval or confirmed collection of COD cash.")}</p>}
+          <button className="button wide" disabled={!physicalAvailable} onClick={addPhysical}><ShoppingCart size={18} /> {t("কার্টে যোগ করুন", "Add bundle to cart")}</button>
         </> : !viewer ? <Link className="button wide" href={`/signin?next=${encodeURIComponent(`/bundles/${bundle.slug}`)}`}>
           {t("কিনতে Gmail দিয়ে লগইন করুন", "Sign in to buy")}</Link> : <>
           <label className="checkbox"><input type="checkbox" checked={accepted} onChange={(event) => setAccepted(event.target.checked)} />
@@ -169,6 +171,7 @@ export function PhysicalCart({ books, bundles, viewer, ready }: {
   return <div className="container page">
     <span className="eyebrow muted">READ AND RICH</span>
     <h1>{t("ছাপা বইয়ের কার্ট", "Printed-book cart")}</h1>
+    <p className="page-intro">{t("ছাপা বই ও ছাপা-ইবুক মিশ্র বান্ডেল একসঙ্গে অর্ডার করুন।", "Order printed books and mixed print/ebook bundles together.")}</p>
     {!loaded ? <p role="status">{t("কার্ট লোড হচ্ছে…", "Loading cart…")}</p> : !lines.length ? <div className="notice">
       <p>{t("কার্টে কোনো ছাপা বই নেই।", "Your printed-book cart is empty.")}</p>
       <Link href="/#catalogue" className="button secondary">{t("বই দেখুন", "Explore books")}</Link>
@@ -225,7 +228,7 @@ export function MyOrders({ orders }: { orders: Order[] }) {
   const { locale, t } = useLanguage();
   return <div className="container page"><h1>{t("আমার অর্ডার", "My orders")}</h1>
     {orders.length ? <div className="order-list">{orders.map((order) => <Link className="panel order-list-item" href={`/orders/${order.id}`} key={order.id}>
-      <strong>{order.order_kind === "physical" ? t("ছাপা বইয়ের অর্ডার", "Printed-book order") : order.book_title}</strong><span>{order.order_kind === "physical" ? t("ছাপা বই", "Printed") : t("ইবুক", "Ebook")}</span>
+      <strong>{order.order_kind === "physical" ? t("ডেলিভারি অর্ডার", "Delivery order") : order.book_title}</strong><span>{order.order_kind === "physical" ? t("ডেলিভারি", "Delivery") : t("ইবুক", "Ebook")}</span>
       <span><Price paisa={order.amount_paisa} /></span><small>{new Date(order.created_at).toLocaleDateString(locale === "bn" ? "bn-BD" : "en-BD")}</small>
       <span>{order.payment_method === "cod" && order.status === "pending" ? t("ডেলিভারিতে পরিশোধ", "Pay on delivery") : statusLabel(order.status, locale)}</span></Link>)}</div> : <p className="notice">{t("এখনো কোনো অর্ডার নেই।", "No orders yet.")}</p>}
   </div>;
@@ -249,7 +252,7 @@ export function PhysicalOrderView({ order, shipping, lines, rejectionReason }: {
   }
   return <div className="container page narrow physical-order">
     <Link href="/orders" className="text-link">{t("আমার অর্ডার", "My orders")}</Link>
-    <h1>{t("ছাপা বইয়ের অর্ডার", "Printed-book order")}</h1>
+    <h1>{t("ডেলিভারি অর্ডার", "Delivery order")}</h1>
     <p>{t("রেফারেন্স", "Reference")}: <strong>{order.tran_id}</strong></p>
     <div className="panel"><h2>{t("অর্ডারের অবস্থা", "Order status")}</h2>
       <p>{t("ডেলিভারি", "Delivery")}: <strong>{({ placed: t("অর্ডার হয়েছে", "Placed"), shipped: t("পাঠানো হয়েছে", "Shipped"), delivered: t("পৌঁছেছে", "Delivered"), cancelled: t("বাতিল", "Cancelled"), returned: t("ফেরত এসেছে", "Returned") })[shipping.fulfillment_status]}</strong></p>
@@ -261,7 +264,12 @@ export function PhysicalOrderView({ order, shipping, lines, rejectionReason }: {
       {shipping.refund_due && <p className="notice">{t("রিফান্ড মালিক যাচাই করছেন।", "A manual refund is pending.")}</p>}
     </div>
     <div className="panel"><h2>{t("বই ও খরচ", "Books and total")}</h2>
-      {lines.map((line) => <p key={line.id}>{title(line, locale)} × {line.quantity} — <Price paisa={line.unit_price_paisa * line.quantity} /></p>)}
+      {lines.map((line) => <div key={line.id}><p>{title(line, locale)} × {line.quantity} — <Price paisa={line.unit_price_paisa * line.quantity} /></p>
+        {!!line.order_item_members?.length && <ul>{line.order_item_members.map((member) => <li key={member.book_id}>{title(member, locale)} · {member.format === "ebook" ? t("ইবুক", "Ebook") : t("ছাপা", "Printed")}</li>)}</ul>}
+      </div>)}
+      {lines.some((line) => line.format === "mixed") && <p className="notice">{order.status === "paid"
+        ? <Link href="/library">{t("আপনার ইবুক লাইব্রেরিতে খুলুন", "Open your ebooks in My Library")}</Link>
+        : t("ইবুক পেমেন্ট যাচাই বা COD-এর টাকা পাওয়ার পরে খুলবে।", "Ebooks unlock after payment approval or confirmed COD cash collection.")}</p>}
       <p>{t("ডেলিভারি", "Delivery")}: <Price paisa={shipping.shipping_fee_paisa} /></p>
       <strong>{t("সর্বমোট", "Total")}: <Price paisa={order.amount_paisa} /></strong>
     </div>

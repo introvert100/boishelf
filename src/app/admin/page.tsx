@@ -38,7 +38,7 @@ export default async function Page() {
     db.from("storage_cleanup_jobs").select("id", { count: "exact", head: true }).is("done_at", null),
     db.from("manual_payment_claims").select("*").eq("status", "submitted")
       .order("submitted_at", { ascending: true }).limit(100),
-    db.from("orders").select("*,order_shipping(*),order_items(id,item_type,title_bn,title_en,format,quantity,unit_price_paisa)")
+    db.from("orders").select("*,order_shipping(*),order_items(id,item_type,title_bn,title_en,format,quantity,unit_price_paisa,order_item_members(book_id,title_bn,title_en,format))")
       .eq("order_kind", "physical").order("created_at", { ascending: false }).limit(100),
     shippingRates(),
     physicalReadiness(),

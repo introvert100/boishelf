@@ -64,7 +64,7 @@ test("return paths cannot redirect to external domains", () => {
     "/\r\nevil",
     null,
   ])
-    assert.equal(safeReturnTo(value), "/library");
+    assert.equal(safeReturnTo(value), "/");
   assert.equal(
     safeReturnTo("/checkout/book?lang=en"),
     "/checkout/book?lang=en",

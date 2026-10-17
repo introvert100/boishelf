@@ -20,6 +20,7 @@ Use Node 24 and `npm ci`.
 - `npm test`: run unit, security, and database tests.
 - `npm run db:test`: run database/RLS tests.
 - `npm run test:e2e`: run Playwright desktop/mobile flows.
+- `npm run test:e2e:ui`: test login, library, navigation, and mixed bundles in an isolated fixture app.
 - `npm run build` / `npm start`: build and serve production output.
 - `npm run check`: typecheck, test, and build.
 - `npm run validate:render`: validate `render.yaml`.
@@ -31,6 +32,8 @@ Use two-space indentation, strict TypeScript, small functions, PascalCase React 
 Put security tests in `tests/security.test.ts`, RLS tests in `tests/database.test.ts`, and journeys in `tests/browser/store.spec.ts`. Keep ebook/cover buckets private and Gmail-only OTP enabled. Keep bKash and COD disabled until their business/courier arrangements, policies, fees, and stock are ready. Never unlock on a transaction ID alone or mark COD paid before cash collection. Keep addresses service-only. Copy `.env.example` to `.env.local`; never commit secrets. Use new migrations and review RLS.
 
 ## Strict Debug Protocol
+
+Bundles may contain ebooks, printed copies, or both. Snapshot each member's edition; reserve stock only for printed members and grant ebook access only after verified payment or COD cash collection. Keep synthetic browser fixtures outside the production app.
 
 1. **Describe the failure.** Record route/action, exact message, timestamp, environment, account role, and reproduction steps. Separate symptoms from hypotheses.
 2. **Reproduce first.** Capture browser console output, network status/response, Render logs, Supabase logs, and request IDs. Redact passwords, OTPs, API keys, private paths, payment details, and signed URLs.

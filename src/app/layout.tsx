@@ -22,7 +22,7 @@ export default async function RootLayout({
 }) {
   const locale = (await cookies()).get("locale")?.value === "en" ? "en" : "bn";
   return (
-    <html lang={locale}>
+    <html lang={locale} data-scroll-behavior="smooth">
       <body>
         <Shell
           initialLocale={locale}

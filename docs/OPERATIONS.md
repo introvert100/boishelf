@@ -8,6 +8,8 @@ Customers can refresh `/orders/<id>` to see pending, under-review, rejected or p
 
 ## Printed orders and cash on delivery
 
+Mixed bundles use the same delivery queue. Each saved order lists the purchased edition of every component. Reserve, dispatch, cancel, and restock only printed copies; ebook components have no physical stock. Approving bKash or confirming COD cash collection grants the ebook components in My Library. A paid cancellation revokes downloads from that order; completing its refund keeps them revoked. Full refunds after a return also revoke that order's ebook access. A separate earlier purchase is preserved. Already downloaded files cannot be recalled.
+
 Open `/admin` → **Commerce** to see the private address and saved item/price snapshot. Enter a delivery target for each order. Book a COD-capable courier manually, enter its name and tracking number, then mark the order shipped. The buyer sees progress in **My Orders**; no email or courier API is sent. Stock is reserved when ordered and remains reserved until dispatch or pre-dispatch cancellation. Dispatch consumes it. Cancel a pending order before dispatch to release stock; a paid bKash order cancelled before dispatch requires a manual refund. After a return, inspect the books and adjust on-hand stock with a recorded reason before selling them again.
 
 Mark COD **paid only after** the courier delivers and you actually receive the cash. If a buyer says they sent bKash money before cancellation, reconcile it first. Returns and refunds need an explicit admin action; keep the courier and refund references in your own records. Do not put private addresses, PINs, OTPs, or signed download links into logs or support screenshots.

@@ -5,6 +5,7 @@ import { getBooks } from "./catalog";
 import { getBundles } from "./bundles";
 import { cartInput, districts } from "./commerce-validation";
 import { AppError } from "./http";
+import { printedBundleMembers } from "./bundle-selection";
 import type { CartLine } from "./types";
 
 export async function shippingRates() {
@@ -58,9 +59,9 @@ export async function quotePhysicalCart(linesInput: unknown, district: string) {
   const items = lines.map((line: CartLine) => {
     const product = line.kind === "book"
       ? books.find((b) => b.id === line.id && !b.is_demo && b.print_price_paisa != null)
-      : bundles.find((b) => b.id === line.id && b.kind === "physical");
+      : bundles.find((b) => b.id === line.id && b.kind !== "ebook");
     if (!product) throw new AppError(409, "A printed item is no longer available. Refresh your cart.");
-    const members = line.kind === "book" ? [product as typeof books[number]] : (product as typeof bundles[number]).members;
+    const members = line.kind === "book" ? [product as typeof books[number]] : printedBundleMembers(product as typeof bundles[number]);
     for (const member of members)
       required.set(member.id, (required.get(member.id) || 0) + line.quantity);
     const price = line.kind === "book" ? (product as typeof books[number]).print_price_paisa! : product.price_paisa;

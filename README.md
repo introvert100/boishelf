@@ -43,7 +43,11 @@ To remove a book, choose its trash button and read the confirmation. Books with 
 
 ## Printed books and bundles
 
-In `/admin` → **Commerce**, set Dhaka and outside-Dhaka delivery fees. Create a bundle by choosing **Printed** or **Ebook**, at least two eligible books, one total price, and **Published**. Printed bundles use each included book's normal stock; approved ebook bundles unlock every included title. Order contents and prices do not change when a bundle is later edited. Publish your final Shipping policy in both languages alongside Privacy, Terms, Refund, and Copyright.
+In `/admin` → **Print, bundles & delivery**, set Dhaka and outside-Dhaka delivery fees. Create a **Printed only**, **Ebooks only**, or **Mixed: printed + ebooks** bundle with at least two different books and one total price. Every book remains visible; unavailable choices explain whether it needs publishing, an ebook file, or a printed edition. For a mixed bundle, choose each selected book's edition, including at least one of each format. Printed components use normal stock. Ebooks unlock only after bKash approval or confirmed COD cash collection. Order contents, editions, and prices stay fixed when the bundle changes. Publish your final Shipping policy in both languages alongside Privacy, Terms, Refund, and Copyright.
+
+Successful Gmail sign-in always opens the storefront homepage. My Library remains available from the header. Page navigation shows a progress indicator and loading skeleton while the next route loads; links to sections on the same page scroll directly.
+
+`npm run test:e2e:ui` runs desktop/mobile login, library, navigation, and mixed-bundle journeys against an isolated fixture app with synthetic auth responses. It never sends real email or contacts the production database. `npm run test:e2e` runs the production-build storefront/security journeys.
 
 For a printed order, enter its delivery target, courier, and tracking number in Commerce. Mark COD paid only after receiving the cash. Review bKash claims separately in **Orders**. Buyer status and tracking appear in **My Orders**; no courier API or order-update email is sent. Existing admin browser drafts, historical database identifiers, and order references remain unchanged by the rebrand.
 
