@@ -623,5 +623,75 @@ test("PostgreSQL migration, access policies and atomic payment transitions", asy
     assert.equal((await db.query("select * from entitlements where order_id=$1", [order.id])).rows.length, 2);
     await assert.rejects(db.query("select create_ebook_bundle_order($1,$2,'01712345678')", [other, bundle]), /already_owned/);
   });
+  await t.test("mixed bundle snapshots reserve only print stock and COD unlocks ebooks only after cash collection", async () => {
+    const ids = ["14141414-1414-4141-8141-141414141414", "15151515-1515-4151-8151-151515151515"];
+    for (const [i,id] of ids.entries()) await db.query(`insert into books(id,slug,title_bn,title_en,author_bn,author_en,
+      description_bn,description_en,category,price_paisa,pages,published) values($1,$2,'মিশ্র বই','Mixed book','লেখক','Author',
+      'বইয়ের বিবরণ','Book description','fiction',1500,20,true)`, [id, `mixed-${i}`]);
+    await db.query("select save_print_edition($1,$2,2000,5,'Received copies')", [ids[0], reader]);
+    await db.query("insert into book_formats(book_id,format,storage_path,original_name,size_bytes) values($1,'pdf','fixture.pdf','ebook.pdf',100)", [ids[1]]);
+    const members = JSON.stringify([{ bookId: ids[0], format: "physical" }, { bookId: ids[1], format: "ebook" }]);
+    const bundle = (await db.query<{ id: string }>(`select save_bundle_v2(null,'mixed-pair','mixed','মিশ্র','Mixed pair',
+      'বইয়ের বান্ডেল','Book bundle',3000,true,$1::jsonb) as id`, [members])).rows[0].id;
+    await assert.rejects(asRole("authenticated", reader, () => db.query(`select save_bundle_v2(null,'forbidden','mixed',
+      'মিশ্র','Mixed','বিবরণ','Description',3000,true,$1::jsonb)`, [members])));
+    await assert.rejects(asRole("authenticated", reader, () => db.query("select private.grant_order_ebooks($1)", [bundle])));
+    const lines = JSON.stringify([{ kind: "bundle", id: bundle, quantity: 1 }]);
+    const create = async (key: string, method = "cod", user = reader) => (await db.query<{ v: { id: string; reused: boolean } }>(
+      "select create_physical_order($1,$2,$3::jsonb,'Fixture Reader','01712345678','Dhaka','Test area','Test street',$4,$5,3500) as v",
+      [user,key,lines,method,method === "cod" ? null : "01812345678"])).rows[0].v;
+    const key = "16161616-1616-4161-8161-161616161616";
+    const order = await create(key);
+    assert.equal((await create(key)).reused, true);
+    assert.equal((await db.query<{ reserved: number }>("select reserved from print_editions where book_id=$1", [ids[0]])).rows[0].reserved, 1);
+    assert.equal((await db.query("select * from print_editions where book_id=$1", [ids[1]])).rows.length, 0);
+    assert.equal((await db.query("select * from entitlements where order_id=$1", [order.id])).rows.length, 0);
+    await assert.rejects(db.query("select change_physical_order($1,$2,'collect')", [order.id, other]), /invalid_transition/);
+    // Later edits cannot change a pending order's purchased editions or price.
+    await db.query("select save_print_edition($1,$2,1500,5,'Added printed edition')", [ids[1], reader]);
+    await db.query(`select save_bundle_v2($1,'mixed-pair','physical','মিশ্র','Mixed pair','বইয়ের বান্ডেল',
+      'Book bundle',4000,true,$2::jsonb)`, [bundle, JSON.stringify(ids.map((bookId) => ({ bookId, format: "physical" })))]);
+    const snapshot = (await db.query<{ book_id: string; format: string }>(`select m.book_id,m.format from order_item_members m
+      join order_items i on i.id=m.order_item_id where i.order_id=$1 order by m.book_id`, [order.id])).rows;
+    assert.deepEqual(snapshot, [{ book_id: ids[0], format: "physical" }, { book_id: ids[1], format: "ebook" }]);
+    await db.query("select change_physical_order($1,$2,'target','2026-12-01')", [order.id, other]);
+    await db.query("select change_physical_order($1,$2,'ship',null,'Courier','TRACK-MIXED')", [order.id, other]);
+    assert.equal((await db.query("select * from entitlements where order_id=$1", [order.id])).rows.length, 0);
+    await db.query("select change_physical_order($1,$2,'deliver')", [order.id, other]);
+    await db.query("select change_physical_order($1,$2,'collect')", [order.id, other]);
+    const access = (await db.query<{ book_id: string }>("select book_id from entitlements where order_id=$1 and revoked_at is null", [order.id])).rows;
+    assert.deepEqual(access.map((row) => row.book_id), [ids[1]]);
+    await assert.rejects(db.query("select change_physical_order($1,$2,'collect')", [order.id, other]), /invalid_transition/);
+    await db.query("select change_physical_order($1,$2,'return')", [order.id, other]);
+    await db.query("select change_physical_order($1,$2,'refund')", [order.id, other]);
+    assert.equal((await db.query("select * from entitlements where order_id=$1 and revoked_at is null", [order.id])).rows.length, 0);
+    // Restore mixed definition for payment/cancellation checks.
+    await db.query(`select save_bundle_v2($1,'mixed-pair','mixed','মিশ্র','Mixed pair','বইয়ের বান্ডেল',
+      'Book bundle',3000,true,$2::jsonb)`, [bundle, members]);
+    const prepaid = await create("17171717-1717-4171-8171-171717171717", "bkash_manual", other);
+    await db.query("select submit_manual_claim($1,$2,'MIXED123','1234')", [other, prepaid.id]);
+    const claim = (await db.query<{ id: string }>("select id from manual_payment_claims where order_id=$1", [prepaid.id])).rows[0].id;
+    await db.query("select approve_manual_claim($1,$2,$3)", [prepaid.id,claim,reader]);
+    await db.query("select approve_manual_claim($1,$2,$3)", [prepaid.id,claim,reader]);
+    assert.equal((await db.query("select * from entitlements where order_id=$1 and revoked_at is null", [prepaid.id])).rows.length, 1);
+    await db.query("select change_physical_order($1,$2,'cancel_paid')", [prepaid.id,reader]);
+    assert.equal((await db.query("select * from entitlements where order_id=$1 and revoked_at is null", [prepaid.id])).rows.length, 0);
+    assert.equal((await db.query<{ reserved: number }>("select reserved from print_editions where book_id=$1", [ids[0]])).rows[0].reserved, 0);
+    const cancelled = await create("18181818-1818-4181-8181-181818181818");
+    await db.query("select change_physical_order($1,$2,'cancel')", [cancelled.id,reader]);
+    assert.equal((await db.query("select * from entitlements where order_id=$1", [cancelled.id])).rows.length, 0);
+    await assert.rejects(db.query(`select save_bundle_v2(null,'invalid-mixed','mixed','মিশ্র','Mixed','বইয়ের বান্ডেল',
+      'Book bundle',3000,true,$1::jsonb)`, [JSON.stringify(ids.map((bookId) => ({ bookId, format: "physical" })))]), /invalid_bundle/);
+    const separate = (await db.query<{ v: {id: string} }>("select create_manual_order($1,$2,'01712345678') as v", [other,ids[1]])).rows[0].v;
+    await db.query("select submit_manual_claim($1,$2,'SEPARATE123','1234')", [other,separate.id]);
+    const separateClaim = (await db.query<{ id: string }>("select id from manual_payment_claims where order_id=$1", [separate.id])).rows[0].id;
+    await db.query("select approve_manual_claim($1,$2,$3)", [separate.id,separateClaim,reader]);
+    const again = await create("19191919-1919-4191-8191-191919191919", "bkash_manual", other);
+    await db.query("select submit_manual_claim($1,$2,'MIXEDAGAIN','1234')", [other,again.id]);
+    const againClaim = (await db.query<{ id: string }>("select id from manual_payment_claims where order_id=$1", [again.id])).rows[0].id;
+    await db.query("select approve_manual_claim($1,$2,$3)", [again.id,againClaim,reader]);
+    await db.query("select change_physical_order($1,$2,'cancel_paid')", [again.id,reader]);
+    assert.equal((await db.query("select * from entitlements where order_id=$1 and revoked_at is null", [separate.id])).rows.length, 1);
+  });
   await db.close();
 });
