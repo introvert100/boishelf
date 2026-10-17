@@ -2,7 +2,7 @@
 
 ## 1. Apply the database migration
 
-Back up the Supabase project. Apply every unapplied file in `supabase/migrations/` in filename order. The existing store already has `20261013000000_read_and_rich_commerce.sql`; apply `20261017102902_mixed_bundles.sql` **before** deploying the navigation/mixed-bundle update. Paste its complete contents into Supabase SQL Editor and run once. It backfills existing bundle/order component formats, adds mixed bundles, and preserves historical orders and entitlements. No existing book or file is deleted. Do not rerun the initial schema or mix SQL Editor and CLI migration history blindly.
+Back up the Supabase project. Apply every unapplied file in `supabase/migrations/` in filename order. The existing store already has `20261017102902_mixed_bundles.sql`, which backfilled bundle/order member formats. The subsequent **single-format-only** update needs no new migration: the application rejects mixed saves and orders and hides old combined offers. Existing order snapshots remain available for fulfillment. Do not remove or rerun historical migrations, or mix SQL Editor and CLI migration history blindly.
 
 Verify RLS on `print_editions`, `bundles`, `bundle_members`, `order_items`, `order_item_members`, `order_shipping`, `fulfillment_events`, and `inventory_events`. The `ebooks` and `covers` buckets remain private. Run `npm run db:test` locally before deploying.
 
@@ -28,7 +28,7 @@ Check `/api/health` and the authenticated `/api/health/ready` monitor. Sign in w
 
 Also test a rejected claim and resubmission, duplicate transaction ID, a second customer, sign-out, mobile/keyboard use, and 200% zoom. Do not claim instant delivery: approval depends on you checking the transfer. Monitor the Admin queue and failed request IDs. The free Render service can sleep and has limited capacity; plan reliable hosting and backups before promising response times.
 
-Test a printed-only book, printed bundle, ebook bundle, and mixed bundle. Confirm cart totals for Dhaka and outside Dhaka, out-of-stock rejection, order retry, cancellation/restocking, COD collection, bKash approval, and ebook entitlements. Only printed components reserve stock. Mixed-bundle ebooks remain locked until payment approval or confirmed COD collection. Check customer address isolation, homepage landing after login, and library refresh. Run `npm run check`, `npm run validate:render`, `npm run test:e2e`, and `npm run test:e2e:ui`.
+Test a printed-only book, printed bundle, and ebook bundle. Confirm mixed offers and mismatched member formats are rejected. Check cart totals for Dhaka and outside Dhaka, out-of-stock rejection, order retry, cancellation/restocking, COD collection, bKash approval, and ebook entitlements. Printed bundles use delivery checkout; ebook bundles unlock only after verified bKash approval. Check customer address isolation, homepage landing after login, and library refresh. Run `npm run check`, `npm run validate:render`, `npm run test:e2e`, and `npm run test:e2e:ui`.
 
 ## Rollback
 

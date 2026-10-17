@@ -20,7 +20,7 @@ export async function POST(request: Request) {
       if (/bundle_unavailable|book_unavailable/.test(error.message))
         throw new AppError(409, "Publish the included books and add their required files or printed editions first.");
       if (error.message.includes("invalid_bundle"))
-        throw new AppError(400, "Choose two to ten different books. Mixed bundles need both an ebook and a printed edition.");
+        throw new AppError(400, "Choose two to ten different books, all printed editions or all ebooks.");
       throw error;
     }
     return Response.json({ id });

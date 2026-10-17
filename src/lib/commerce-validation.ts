@@ -31,7 +31,7 @@ export const physicalCheckoutInput = shippingInput.extend({
 export const bundleInput = z.object({
   id: z.uuid().optional(),
   slug: z.string().min(3).max(90).regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/),
-  kind: z.enum(["ebook","physical","mixed"]),
+  kind: z.enum(["ebook","physical"]),
   title_bn: z.string().trim().min(2).max(160), title_en: z.string().trim().min(2).max(160),
   description_bn: z.string().trim().min(10).max(5000),
   description_en: z.string().trim().min(10).max(5000),
@@ -39,8 +39,6 @@ export const bundleInput = z.object({
   published: z.boolean(), members: z.array(z.object({ bookId: z.uuid(), format: z.enum(["ebook", "physical"]) })).min(2).max(10)
     .refine((members) => new Set(members.map((m) => m.bookId)).size === members.length, "Choose each book once."),
 }).superRefine((bundle, context) => {
-  if (bundle.kind !== "mixed" && bundle.members.some((member) => member.format !== bundle.kind))
+  if (bundle.members.some((member) => member.format !== bundle.kind))
     context.addIssue({ code: "custom", path: ["members"], message: "Choose the matching edition for every book." });
-  if (bundle.kind === "mixed" && new Set(bundle.members.map((member) => member.format)).size !== 2)
-    context.addIssue({ code: "custom", path: ["members"], message: "A mixed bundle needs at least one ebook and one printed book." });
 });

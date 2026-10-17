@@ -59,7 +59,7 @@ export async function quotePhysicalCart(linesInput: unknown, district: string) {
   const items = lines.map((line: CartLine) => {
     const product = line.kind === "book"
       ? books.find((b) => b.id === line.id && !b.is_demo && b.print_price_paisa != null)
-      : bundles.find((b) => b.id === line.id && b.kind !== "ebook");
+      : bundles.find((b) => b.id === line.id && b.kind === "physical");
     if (!product) throw new AppError(409, "A printed item is no longer available. Refresh your cart.");
     const members = line.kind === "book" ? [product as typeof books[number]] : printedBundleMembers(product as typeof bundles[number]);
     for (const member of members)

@@ -14,23 +14,27 @@ const mixed: Bundle = { id: demoBooks[2].id, slug: "mixed-pair", kind: "mixed", 
 test("bundle selection explains each unavailable edition instead of hiding books", () => {
   assert.equal(bundleBookIssue(ebook, "physical"), "physical");
   assert.equal(bundleBookIssue(printed, "ebook"), "ebook");
-  assert.equal(bundleBookIssue(ebook, "mixed"), null);
-  assert.equal(bundleBookIssue(printed, "mixed"), null);
-  assert.equal(bundleBookIssue({ ...printed, published: false }, "mixed"), "draft");
+  assert.equal(bundleBookIssue(ebook, "ebook"), null);
+  assert.equal(bundleBookIssue(printed, "physical"), null);
+  assert.equal(bundleBookIssue({ ...printed, published: false }, "physical"), "draft");
   assert.equal(bundleBookIssue({ ...ebook, is_demo: true }, "ebook"), "sample");
   assert.equal(bundleBookIssue({ ...ebook, archived_at: "2026-10-17" }, "ebook"), "archived");
 });
-test("mixed availability uses selected editions and reserves only printed components", () => {
-  assert.equal(bundleIsAvailable(mixed), true);
+test("public availability excludes mixed bundles and every mismatched edition", () => {
+  assert.equal(bundleIsAvailable(mixed), false);
   assert.equal(bundleIsAvailable(mixed, 3), false);
   assert.deepEqual(printedBundleMembers(mixed).map((book) => book.id), [printed.id]);
   assert.equal(bundleIsAvailable({ ...mixed, kind: "ebook" }), false);
   assert.equal(bundleIsAvailable({ ...mixed, members: mixed.members.map((book) => ({ ...book, bundle_format: "ebook" })) }), false);
+  const secondEbook = {...ebook, id: printed.id, bundle_format: "ebook" as const};
+  assert.equal(bundleIsAvailable({...mixed, kind: "ebook", members: [{...ebook, bundle_format: "ebook"}, secondEbook]}), true);
 });
-test("server validation rejects mixed bundles with only one format or duplicate books", () => {
+test("server validation accepts only single-format bundles and rejects mixed payloads", () => {
   const input = { ...mixed, members: mixed.members.map((book) => ({ bookId: book.id, format: book.bundle_format })) };
-  assert.equal(bundleInput.safeParse(input).success, true);
+  assert.equal(bundleInput.safeParse(input).success, false);
+  assert.equal(bundleInput.safeParse({ ...input, kind: "ebook", members: input.members.map((book) => ({...book, format: "ebook"})) }).success, true);
+  assert.equal(bundleInput.safeParse({ ...input, kind: "physical", members: input.members.map((book) => ({...book, format: "physical"})) }).success, true);
   assert.equal(bundleInput.safeParse({ ...input, members: input.members.map((book) => ({ ...book, format: "ebook" })) }).success, false);
   assert.equal(bundleInput.safeParse({ ...input, kind: "physical" }).success, false);
-  assert.equal(bundleInput.safeParse({ ...input, members: [input.members[0], input.members[0]] }).success, false);
+  assert.equal(bundleInput.safeParse({ ...input, kind: "ebook", members: [input.members[0], input.members[0]] }).success, false);
 });

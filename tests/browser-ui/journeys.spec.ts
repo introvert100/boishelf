@@ -13,7 +13,7 @@ async function login(page: Page) {
   await page.getByRole("button", {name: "Send login code"}).click();
   await page.getByRole("textbox", {name: "Eight-digit code"}).fill("12345678");
   await page.getByRole("button", {name: /Verify|Sign in/}).last().click();
-  await expect(page).toHaveURL("http://localhost:3001/");
+  await expect(page).toHaveURL(new URL("/", page.url()).href);
 }
 
 test("OTP always opens the homepage with an SSR session; library and refresh stay usable", async ({page}, info) => {
@@ -57,23 +57,24 @@ test("navigation immediately shows progress, clears on completion, and same-page
   await expect(page.locator(".navigation-feedback")).toHaveCount(0);
 });
 
-test("bundle editor shows all books with reasons, saves per-book formats, and restores edit selections", async ({page}, info) => {
+test("bundle editor offers only printed or ebook bundles and saves matching editions", async ({page}, info) => {
   await page.goto("/bundle-editor"); await english(page);
   const picker = page.getByRole("group", {name: "Choose at least two books"});
-  await expect(picker.getByRole("checkbox")).toHaveCount(3);
+  await expect(picker.getByRole("checkbox")).toHaveCount(4);
+  const format = page.getByRole("combobox", {name: "Format", exact: true});
+  await expect(format.locator("option")).toHaveCount(2);
+  await expect(format.locator('option[value="mixed"]')).toHaveCount(0);
   await expect(picker.getByRole("checkbox", {name: "Ebook Only"})).toBeDisabled();
   await expect(picker.getByText("Save a printed edition price and stock for this book.")).toBeVisible();
   await expect(picker.getByRole("checkbox", {name: "Draft Book"})).toBeDisabled();
-  await page.getByRole("combobox", {name: "Format", exact: true}).selectOption("mixed");
-  await picker.getByRole("checkbox", {name: "Ebook Only"}).check();
+  await picker.getByRole("checkbox", {name: "Both Editions"}).check();
   await picker.getByRole("checkbox", {name: "Print Only"}).check();
-  await expect(picker.getByLabel("Edition for Ebook Only")).toHaveValue("ebook");
-  await expect(picker.getByLabel("Edition for Print Only")).toHaveValue("physical");
-  await page.getByLabel("URL slug").fill("mixed-test");
-  await page.getByLabel("Bangla title").fill("মিশ্র বই");
-  await page.getByLabel("English title", {exact: true}).fill("Mixed test");
-  await page.getByLabel("Bangla description").fill("একটি ইবুক ও একটি ছাপা বই।");
-  await page.getByLabel("English description", {exact: true}).fill("One ebook and one printed book.");
+  await expect(picker.getByRole("combobox")).toHaveCount(0);
+  await page.getByLabel("URL slug").fill("printed-test");
+  await page.getByLabel("Bangla title").fill("ছাপা বই");
+  await page.getByLabel("English title", {exact: true}).fill("Printed test");
+  await page.getByLabel("Bangla description").fill("একসঙ্গে দুটি ছাপা বই।");
+  await page.getByLabel("English description", {exact: true}).fill("Two printed books together.");
   await page.getByLabel("Bundle total price (BDT)").fill("300");
   await page.getByLabel("Published", {exact: true}).check();
   let saved: {members: {bookId: string; format: string}[]} | undefined;
@@ -83,20 +84,39 @@ test("bundle editor shows all books with reasons, saves per-book formats, and re
   await page.screenshot({path: `test-results/bundle-editor-${info.project.name}.png`, fullPage: true, caret: "initial"});
   await page.getByRole("button", {name: "Save bundle", exact: true}).click();
   await expect(page.getByText("Bundle saved.", {exact: true})).toBeVisible();
-  expect(saved?.members.map((member) => member.format)).toEqual(["ebook", "physical"]);
-  await page.getByRole("button", {name: "Edit", exact: true}).click();
-  await expect(page.getByRole("combobox", {name: "Format", exact: true})).toHaveValue("mixed");
-  await expect(picker.getByRole("checkbox", {name: "Ebook Only"})).toBeChecked();
+  expect(saved?.members.map((member) => member.format)).toEqual(["physical", "physical"]);
+  await page.locator(".cart-row").filter({hasText: "Printed Pair"}).getByRole("button", {name: "Edit", exact: true}).click();
+  await expect(format).toHaveValue("physical");
+  await expect(picker.getByRole("checkbox", {name: "Both Editions"})).toBeChecked();
   await expect(picker.getByRole("checkbox", {name: "Print Only"})).toBeChecked();
+  await format.selectOption("ebook");
+  await expect(picker.getByRole("checkbox", {name: "Print Only"})).not.toBeChecked();
+  await expect(picker.getByRole("checkbox", {name: "Print Only"})).toBeDisabled();
+  await picker.getByRole("checkbox", {name: "Ebook Only"}).check();
+  await page.getByRole("button", {name: "Save bundle", exact: true}).click();
+  await expect(page.getByText("Bundle saved.", {exact: true})).toBeVisible();
+  expect(saved?.members.map((member) => member.format)).toEqual(["ebook", "ebook"]);
+  await page.locator(".cart-row").filter({hasText: "Mixed Pair"}).getByRole("button", {name: "Edit", exact: true}).click();
+  await expect(format).toHaveValue("");
+  await expect(page.getByRole("button", {name: "Save bundle", exact: true})).toBeDisabled();
+  await expect(format.locator('option[value="mixed"]')).toHaveCount(0);
   await page.locator("body").evaluate((body) => {body.style.zoom = "2";});
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 2)).toBe(true);
 });
 
-test("mixed bundle lists each edition and enters the delivery cart", async ({page}) => {
-  await page.goto("/bundles/mixed-pair"); await english(page);
-  await expect(page.getByText("MIXED BUNDLE", {exact: true})).toBeVisible();
-  await expect(page.getByText(/Ebooks unlock after bKash approval/)).toBeVisible();
+test("storefront sells only single-format bundles and refuses old mixed offers", async ({page}) => {
+  await page.goto("/bundles"); await english(page);
+  await expect(page.getByRole("heading", {name: "Printed Pair"})).toBeVisible();
+  await expect(page.getByRole("heading", {name: "Ebook Pair"})).toBeVisible();
+  await expect(page.getByRole("heading", {name: "Mixed Pair"})).toHaveCount(0);
+  await page.goto("/bundles/mixed-pair");
+  await expect(page.getByRole("heading", {name: "This bundle is unavailable"})).toBeVisible();
+  await expect(page.getByRole("button", {name: "Add bundle to cart"})).toHaveCount(0);
+  await page.goto("/bundles/printed-pair");
   await page.getByRole("button", {name: "Add bundle to cart"}).click();
   await expect(page).toHaveURL(/\/cart$/);
-  await expect(page.getByText("Mixed Pair", {exact: true})).toBeVisible();
+  await expect(page.getByText("Printed Pair", {exact: true})).toBeVisible();
+  await page.goto("/bundles/ebook-pair");
+  await expect(page.getByRole("link", {name: "Sign in to buy"})).toBeVisible();
+  await expect(page.getByRole("button", {name: "Add bundle to cart"})).toHaveCount(0);
 });

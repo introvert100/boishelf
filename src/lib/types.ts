@@ -47,6 +47,7 @@ export type Order = {
   created_at: string;
 };
 export type EditionFormat = "ebook" | "physical";
+// "mixed" is read only for historical records; new offers accept EditionFormat.
 export type BundleKind = EditionFormat | "mixed";
 export type BundleMember = Book & { bundle_format: EditionFormat };
 export type Bundle = {

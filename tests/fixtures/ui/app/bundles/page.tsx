@@ -1,3 +1,3 @@
 import { BundleList } from "@/components/commerce";
-import { mixed } from "../../data";
-export default function Page() { return <BundleList bundles={[mixed]} />; }
+import { mixed, printedPair, ebookPair } from "../../data";
+export default function Page() { return <BundleList bundles={[printedPair, ebookPair, mixed]} />; }

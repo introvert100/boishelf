@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import type { Book, Bundle, BundleKind, EditionFormat, Order, OrderLine, OrderShipping } from "@/lib/types";
+import type { Book, Bundle, EditionFormat, Order, OrderLine, OrderShipping } from "@/lib/types";
 import { bundleBookIssue, hasEdition } from "@/lib/bundle-selection";
 import { Price, useLanguage } from "./store";
 
@@ -59,7 +59,7 @@ export function PrintEditionEditor({ book, onSaved, onSuccess }: {
 
 type PhysicalAdminOrder = Order & { order_shipping: OrderShipping | OrderShipping[] | null;
   order_items: OrderLine[] };
-type BundleDraft = { id?: string; slug: string; kind: BundleKind;
+type BundleDraft = { id?: string; slug: string; kind: EditionFormat | "";
   title_bn: string; title_en: string; description_bn: string; description_en: string;
   price: string; published: boolean; members: { bookId: string; format: EditionFormat }[] };
 const blankBundle: BundleDraft = { slug: "", kind: "physical", title_bn: "", title_en: "",
@@ -119,15 +119,20 @@ export function CommerceAdmin({ books, bundles, physicalOrders, shipping, onSucc
     draft: t("বইটি আগে প্রকাশ করুন।", "Publish this book first."),
     ebook: t("এই বইয়ে PDF বা EPUB আপলোড করুন।", "Upload a PDF or EPUB for this book."),
     physical: t("এই বইয়ের ছাপা সংস্করণের দাম ও মজুত সংরক্ষণ করুন।", "Save a printed edition price and stock for this book."),
-    edition: t("একটি ইবুক ফাইল বা ছাপা সংস্করণ যোগ করুন।", "Add an ebook file or a printed edition."),
   };
-  const mixedValid = draft.kind !== "mixed" || new Set(draft.members.map((member) => member.format)).size === 2;
-  function changeKind(kind: BundleKind) {
+  function changeKind(kind: EditionFormat) {
     setDraft({ ...draft, kind, members: draft.members.flatMap((member) => {
       const book = books.find((item) => item.id === member.bookId);
       if (!book || bundleBookIssue(book, kind)) return [];
-      return [{ ...member, format: kind === "mixed" ? member.format : kind }];
+      return [{ ...member, format: kind }];
     }) });
+  }
+  function editBundle(bundle: Bundle) {
+    const kind = bundle.kind === "mixed" ? "" : bundle.kind;
+    setDraft({ id: bundle.id, slug: bundle.slug, kind, title_bn: bundle.title_bn, title_en: bundle.title_en,
+      description_bn: bundle.description_bn, description_en: bundle.description_en, price: String(bundle.price_paisa / 100),
+      published: !!kind && bundle.published, members: kind
+        ? bundle.members.map((member) => ({ bookId: member.id, format: kind })) : [] });
   }
   return <div className="commerce-admin">
     {error && <p className="notice error" role="alert">{error}</p>}
@@ -143,18 +148,16 @@ export function CommerceAdmin({ books, bundles, physicalOrders, shipping, onSucc
     <section className="panel admin-form">
       <h2>{t("বান্ডেল", "Bundles")}</h2>
       {bundles.length > 0 && <div className="bundle-admin-list">{bundles.map((bundle) => <div key={bundle.id} className="cart-row">
-        <span><strong>{name(bundle, locale)}</strong> · {bundle.kind} · <Price paisa={bundle.price_paisa} />
-          {bundle.archived_at ? ` · ${t("আর্কাইভ", "Archived")}` : bundle.published ? ` · ${t("প্রকাশিত", "Published")}` : ` · ${t("খসড়া", "Draft")}`}</span>
-        {!bundle.archived_at && <><button type="button" className="button secondary" onClick={() => setDraft({ id: bundle.id, slug: bundle.slug, kind: bundle.kind,
-          title_bn: bundle.title_bn, title_en: bundle.title_en, description_bn: bundle.description_bn,
-          description_en: bundle.description_en, price: String(bundle.price_paisa / 100),
-          published: bundle.published, members: bundle.members.map((member) => ({ bookId: member.id, format: member.bundle_format })) })}>{t("সম্পাদনা", "Edit")}</button>
+        <span><strong>{name(bundle, locale)}</strong> · {bundle.kind === "mixed" ? t("এক ধরনের বই বাছা প্রয়োজন", "Choose a single format") : bundle.kind === "physical" ? t("ছাপা বই", "Printed only") : t("ইবুক", "Ebooks only")} · <Price paisa={bundle.price_paisa} />
+          {bundle.archived_at ? ` · ${t("আর্কাইভ", "Archived")}` : bundle.kind === "mixed" ? ` · ${t("বিক্রির জন্য উপলব্ধ নয়", "Unavailable for sale")}` : bundle.published ? ` · ${t("প্রকাশিত", "Published")}` : ` · ${t("খসড়া", "Draft")}`}</span>
+        {!bundle.archived_at && <><button type="button" className="button secondary" onClick={() => editBundle(bundle)}>{t("সম্পাদনা", "Edit")}</button>
           <button type="button" className="button secondary" disabled={busy} onClick={() => void archiveBundle(bundle)}>{t("আর্কাইভ", "Archive")}</button></>}
       </div>)}</div>}
       <form className="admin-form" onSubmit={(event) => void saveBundle(event)}>
         <h3>{draft.id ? t("বান্ডেল সম্পাদনা", "Edit bundle") : t("নতুন বান্ডেল", "New bundle")}</h3>
-        <div className="form-grid"><label>{t("ধরন", "Format")}<select value={draft.kind} onChange={(event) => changeKind(event.target.value as BundleKind)}>
-          <option value="physical">{t("শুধু ছাপা বই", "Printed only")}</option><option value="ebook">{t("শুধু ইবুক", "Ebooks only")}</option><option value="mixed">{t("ছাপা বই + ইবুক", "Mixed: printed + ebooks")}</option></select></label>
+        <div className="form-grid"><label>{t("ধরন", "Format")}<select required value={draft.kind} onChange={(event) => changeKind(event.target.value as EditionFormat)}>
+          {!draft.kind && <option value="" disabled>{t("একটি ধরন বাছুন", "Choose one format")}</option>}
+          <option value="physical">{t("শুধু ছাপা বই", "Printed only")}</option><option value="ebook">{t("শুধু ইবুক", "Ebooks only")}</option></select></label>
           <label>URL slug<input required pattern="[a-z0-9]+(-[a-z0-9]+)*" minLength={3} maxLength={90} value={draft.slug} onChange={(event) => setDraft({ ...draft, slug: event.target.value })} /></label></div>
         <div className="form-grid"><label>{t("নাম (বাংলা)", "Bangla title")}<input required minLength={2} maxLength={160} value={draft.title_bn} onChange={(event) => setDraft({ ...draft, title_bn: event.target.value })} /></label>
           <label>English title<input required minLength={2} maxLength={160} value={draft.title_en} onChange={(event) => setDraft({ ...draft, title_en: event.target.value })} /></label></div>
@@ -162,29 +165,24 @@ export function CommerceAdmin({ books, bundles, physicalOrders, shipping, onSucc
           <label>English description<textarea required minLength={10} value={draft.description_en} onChange={(event) => setDraft({ ...draft, description_en: event.target.value })} /></label></div>
         <label>{t("বান্ডেলের মোট দাম (টাকা)", "Bundle total price (BDT)")}<input type="number" min="10" max="100000" step="0.01" required value={draft.price} onChange={(event) => setDraft({ ...draft, price: event.target.value })} /></label>
         <fieldset className="bundle-member-picker"><legend>{t("অন্তত দুটি বই বাছুন", "Choose at least two books")}</legend>
-          <p className="field-help">{t("সব বই নিচে আছে। বাছা যাচ্ছে না এমন বইয়ের পাশে কারণ দেখুন। মিশ্র বান্ডেলে প্রতিটি বইয়ের ধরন বাছুন।", "All books are listed below. Unavailable books explain what to fix. For mixed bundles, choose each book’s edition.")}</p>
+          <p className="field-help">{t("বান্ডেলের সব বই একই ধরনের হতে হবে: শুধু ছাপা বই অথবা শুধু ইবুক। বাছা যাচ্ছে না এমন বইয়ের পাশে কারণ দেখুন।", "Every book must match the bundle format: printed only or ebooks only. Unavailable books explain what to fix.")}</p>
+          {!draft.kind && <p className="notice">{t("এই পুরোনো বান্ডেলটি বিক্রি করা যাবে না। একটি ধরন বেছে অন্তত দুটি উপযুক্ত বই বাছুন। আগের অর্ডার থাকবে।", "This old bundle cannot be sold. Choose one format and at least two eligible books. Previous orders are preserved.")}</p>}
           {books.map((book) => {
-            const issue = bundleBookIssue(book, draft.kind);
+            const issue = bundleBookIssue(book, draft.kind || "physical");
             const selected = draft.members.find((member) => member.bookId === book.id);
             return <div key={book.id} className={`bundle-member-row${issue ? " unavailable" : ""}`}>
-              <label><input type="checkbox" disabled={!selected && (!!issue || draft.members.length >= 10)} checked={!!selected}
+              <label><input type="checkbox" disabled={!draft.kind || (!selected && (!!issue || draft.members.length >= 10))} checked={!!selected}
                 onChange={(event) => setDraft({ ...draft, members: event.target.checked
-                  ? [...draft.members, { bookId: book.id, format: draft.kind === "mixed" ? (hasEdition(book, "physical") ? "physical" : "ebook") : draft.kind }]
+                  ? [...draft.members, { bookId: book.id, format: draft.kind as EditionFormat }]
                   : draft.members.filter((member) => member.bookId !== book.id) })} /> {name(book, locale)}</label>
-              <small>{issue ? issueLabels[issue] : [hasEdition(book, "physical") ? t("ছাপা সংস্করণ আছে", "Printed edition available") : "", hasEdition(book, "ebook") ? t("ইবুক আছে", "Ebook available") : ""].filter(Boolean).join(" · ")}</small>
-              {selected && draft.kind === "mixed" && <label>{t("এই বইয়ের ধরন", "Edition for")} {name(book, locale)}
-                <select value={selected.format} onChange={(event) => setDraft({ ...draft, members: draft.members.map((member) => member.bookId === book.id ? { ...member, format: event.target.value as EditionFormat } : member) })}>
-                  {hasEdition(book, "physical") && <option value="physical">{t("ছাপা বই", "Printed")}</option>}
-                  {hasEdition(book, "ebook") && <option value="ebook">{t("ইবুক", "Ebook")}</option>}
-                </select></label>}
+              <small>{!draft.kind ? t("উপরে বান্ডেলের ধরন বাছুন।", "Choose the bundle format above.") : issue ? issueLabels[issue] : [hasEdition(book, "physical") ? t("ছাপা সংস্করণ আছে", "Printed edition available") : "", hasEdition(book, "ebook") ? t("ইবুক আছে", "Ebook available") : ""].filter(Boolean).join(" · ")}</small>
             </div>;
           })}
           {!books.length && <p className="field-help">{t("আগে দুটি বই যোগ করুন।", "Add at least two books first.")}</p>}
           <p role="status">{draft.members.length}/10 {t("টি বই বাছা হয়েছে", "books selected")}</p>
-          {!mixedValid && <p className="field-help">{t("মিশ্র বান্ডেলে অন্তত একটি ইবুক ও একটি ছাপা বই বাছুন।", "A mixed bundle needs at least one ebook and one printed book.")}</p>}
         </fieldset>
         <label className="checkbox"><input type="checkbox" checked={draft.published} onChange={(event) => setDraft({ ...draft, published: event.target.checked })} /> {t("প্রকাশিত", "Published")}</label>
-        <button className="button" disabled={busy || draft.members.length < 2 || !mixedValid}>{t("বান্ডেল সংরক্ষণ করুন", "Save bundle")}</button>
+        <button className="button" disabled={busy || !draft.kind || draft.members.length < 2}>{t("বান্ডেল সংরক্ষণ করুন", "Save bundle")}</button>
         {draft.id && <button className="button secondary" type="button" onClick={() => setDraft(blankBundle)}>{t("নতুন বান্ডেল শুরু করুন", "Start new bundle")}</button>}
       </form>
     </section>

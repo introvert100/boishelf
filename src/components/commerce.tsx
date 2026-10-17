@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { BookOpen, Package, ShoppingCart, Truck } from "lucide-react";
 import { addToCart, readCart, saveCart } from "@/lib/cart";
 import { districts } from "@/lib/commerce-validation";
-import { printedBundleMembers } from "@/lib/bundle-selection";
+import { bundleIsAvailable, printedBundleMembers } from "@/lib/bundle-selection";
 import type { Book, Bundle, CartLine, Order, OrderLine, OrderShipping, Viewer } from "@/lib/types";
 import { Cover, Price, statusLabel, useLanguage } from "./store";
 
@@ -19,6 +19,7 @@ export function BundleCovers({ bundle }: { bundle: Bundle }) {
 }
 export function FeaturedBundles({ bundles }: { bundles: Bundle[] }) {
   const { locale, t } = useLanguage();
+  bundles = bundles.filter((bundle) => bundleIsAvailable(bundle));
   if (!bundles.length) return null;
   return <section className="container page featured-bundles" aria-labelledby="featured-bundles-heading">
     <div className="section-heading"><div><span className="eyebrow muted">READ AND RICH</span>
@@ -26,7 +27,7 @@ export function FeaturedBundles({ bundles }: { bundles: Bundle[] }) {
       <Link className="button secondary" href="/bundles">{t("সব বান্ডেল", "All bundles")}</Link></div>
     <div className="book-grid">{bundles.slice(0, 3).map((bundle) => <article className="book-card bundle-card" key={bundle.id}>
       <Link href={`/bundles/${bundle.slug}`}><BundleCovers bundle={bundle} /></Link>
-      <div className="book-info"><small>{bundle.kind === "mixed" ? t("ছাপা + ইবুক", "Printed + ebooks") : bundle.kind === "physical" ? t("ছাপা বই", "Printed") : t("ইবুক", "Ebook")}</small>
+      <div className="book-info"><small>{bundle.kind === "physical" ? t("ছাপা বই", "Printed") : t("ইবুক", "Ebook")}</small>
         <h3><Link href={`/bundles/${bundle.slug}`}>{title(bundle, locale)}</Link></h3>
         <strong><Price paisa={bundle.price_paisa} /></strong></div>
     </article>)}</div>
@@ -34,14 +35,15 @@ export function FeaturedBundles({ bundles }: { bundles: Bundle[] }) {
 }
 export function BundleList({ bundles }: { bundles: Bundle[] }) {
   const { locale, t } = useLanguage();
+  bundles = bundles.filter((bundle) => bundleIsAvailable(bundle));
   return <div className="container page">
     <span className="eyebrow muted">READ AND RICH</span>
     <h1>{t("বইয়ের বান্ডেল", "Book bundles")}</h1>
-    <p>{t("এক দামে বাছাই করা বই। শুধু ইবুক, শুধু ছাপা বা দুই ধরনের মিশ্র বান্ডেল বাছুন।",
-      "Curated books at one price. Choose ebooks, printed books, or a mixed bundle.")}</p>
+    <p>{t("এক দামে বাছাই করা বই। প্রতিটি বান্ডেলে শুধু ছাপা বই অথবা শুধু ইবুক থাকবে।",
+      "Curated books at one price. Each bundle contains printed books only or ebooks only.")}</p>
     {bundles.length ? <div className="book-grid">{bundles.map((bundle) => <article className="book-card bundle-card" key={bundle.id}>
       <Link href={`/bundles/${bundle.slug}`}><BundleCovers bundle={bundle} /></Link>
-      <div className="book-info"><small>{bundle.kind === "mixed" ? t("ছাপা + ইবুক", "Printed + ebooks") : bundle.kind === "physical" ? t("ছাপা বই", "Printed books") : t("ইবুক", "Ebooks")}</small>
+      <div className="book-info"><small>{bundle.kind === "physical" ? t("ছাপা বই", "Printed books") : t("ইবুক", "Ebooks")}</small>
         <h2><Link href={`/bundles/${bundle.slug}`}>{title(bundle, locale)}</Link></h2>
         <p>{bundle.members.length} {t("টি বই", "books")}</p>
         <strong><Price paisa={bundle.price_paisa} /></strong>
@@ -55,6 +57,10 @@ export function BundleDetail({ bundle, viewer, ebookReady }: { bundle: Bundle; v
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [accepted, setAccepted] = useState(false);
+  if (!bundleIsAvailable(bundle)) return <div className="container page">
+    <h1>{t("এই বান্ডেলটি পাওয়া যাচ্ছে না", "This bundle is unavailable")}</h1>
+    <Link href="/bundles" className="button">{t("সব বান্ডেল", "All bundles")}</Link>
+  </div>;
   const individualTotal = bundle.members.reduce((sum, member) => sum +
     (member.bundle_format === "ebook" ? member.price_paisa : member.print_price_paisa || 0), 0);
   const physicalAvailable = printedBundleMembers(bundle).every((book) =>
@@ -80,7 +86,7 @@ export function BundleDetail({ bundle, viewer, ebookReady }: { bundle: Bundle; v
     <section className="book-detail">
       <BundleCovers bundle={bundle} />
       <div className="detail-copy">
-        <span className="eyebrow muted">{bundle.kind === "mixed" ? t("ছাপা + ইবুক বান্ডেল", "MIXED BUNDLE") : bundle.kind === "physical" ? t("ছাপা বইয়ের বান্ডেল", "PRINTED BUNDLE") : t("ইবুক বান্ডেল", "EBOOK BUNDLE")}</span>
+        <span className="eyebrow muted">{bundle.kind === "physical" ? t("ছাপা বইয়ের বান্ডেল", "PRINTED BUNDLE") : t("ইবুক বান্ডেল", "EBOOK BUNDLE")}</span>
         <h1>{title(bundle, locale)}</h1>
         <p className="description">{locale === "bn" ? bundle.description_bn : bundle.description_en}</p>
         <div className="detail-price"><Price paisa={bundle.price_paisa} /></div>
@@ -89,9 +95,8 @@ export function BundleDetail({ bundle, viewer, ebookReady }: { bundle: Bundle; v
         </p>}
         <h2>{t("বান্ডেলে থাকছে", "Included books")}</h2>
         <ul>{bundle.members.map((book) => <li key={book.id}><Link href={`/books/${book.slug}`}>{title(book, locale)}</Link> · {book.bundle_format === "physical" ? t("ছাপা", "Printed") : t("ইবুক", "Ebook")}</li>)}</ul>
-        {bundle.kind !== "ebook" ? <>
+        {bundle.kind === "physical" ? <>
           {!physicalAvailable && <p className="notice">{t("একটি বই মজুতে নেই।", "A book in this bundle is out of stock.")}</p>}
-          {bundle.kind === "mixed" && <p className="notice">{t("ছাপা বই কুরিয়ারে আসবে। bKash যাচাই বা COD-এর টাকা পাওয়া নিশ্চিত হলে ইবুক লাইব্রেরিতে খুলবে।", "Printed books ship by courier. Ebooks unlock after bKash approval or confirmed collection of COD cash.")}</p>}
           <button className="button wide" disabled={!physicalAvailable} onClick={addPhysical}><ShoppingCart size={18} /> {t("কার্টে যোগ করুন", "Add bundle to cart")}</button>
         </> : !viewer ? <Link className="button wide" href={`/signin?next=${encodeURIComponent(`/bundles/${bundle.slug}`)}`}>
           {t("কিনতে Gmail দিয়ে লগইন করুন", "Sign in to buy")}</Link> : <>
@@ -146,7 +151,7 @@ export function PhysicalCart({ books, bundles, viewer, ready }: {
   }, [loaded, viewer, district, lines]);
   function update(next: CartLine[]) { setLines(next); saveCart(next); clientKey.current = ""; setQuote(null); }
   const products = useMemo(() => lines.map((line) => {
-    const product = line.kind === "book" ? books.find((book) => book.id === line.id) : bundles.find((bundle) => bundle.id === line.id);
+    const product = line.kind === "book" ? books.find((book) => book.id === line.id) : bundles.find((bundle) => bundle.id === line.id && bundle.kind === "physical" && bundleIsAvailable(bundle));
     return { line, product };
   }), [lines, books, bundles]);
   async function order(event: React.FormEvent<HTMLFormElement>) {
@@ -171,7 +176,7 @@ export function PhysicalCart({ books, bundles, viewer, ready }: {
   return <div className="container page">
     <span className="eyebrow muted">READ AND RICH</span>
     <h1>{t("ছাপা বইয়ের কার্ট", "Printed-book cart")}</h1>
-    <p className="page-intro">{t("ছাপা বই ও ছাপা-ইবুক মিশ্র বান্ডেল একসঙ্গে অর্ডার করুন।", "Order printed books and mixed print/ebook bundles together.")}</p>
+    <p className="page-intro">{t("ছাপা বই ও শুধু ছাপা বইয়ের বান্ডেল একসঙ্গে অর্ডার করুন।", "Order printed books and printed-only bundles together.")}</p>
     {!loaded ? <p role="status">{t("কার্ট লোড হচ্ছে…", "Loading cart…")}</p> : !lines.length ? <div className="notice">
       <p>{t("কার্টে কোনো ছাপা বই নেই।", "Your printed-book cart is empty.")}</p>
       <Link href="/#catalogue" className="button secondary">{t("বই দেখুন", "Explore books")}</Link>

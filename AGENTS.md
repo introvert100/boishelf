@@ -20,7 +20,7 @@ Use Node 24 and `npm ci`.
 - `npm test`: run unit, security, and database tests.
 - `npm run db:test`: run database/RLS tests.
 - `npm run test:e2e`: run Playwright desktop/mobile flows.
-- `npm run test:e2e:ui`: test login, library, navigation, and mixed bundles in an isolated fixture app.
+- `npm run test:e2e:ui`: test login, library, navigation, and single-format bundles in an isolated fixture app.
 - `npm run build` / `npm start`: build and serve production output.
 - `npm run check`: typecheck, test, and build.
 - `npm run validate:render`: validate `render.yaml`.
@@ -33,7 +33,7 @@ Put security tests in `tests/security.test.ts`, RLS tests in `tests/database.tes
 
 ## Strict Debug Protocol
 
-Bundles may contain ebooks, printed copies, or both. Snapshot each member's edition; reserve stock only for printed members and grant ebook access only after verified payment or COD cash collection. Keep synthetic browser fixtures outside the production app.
+New bundles contain only printed books or only ebooks; never combine editions. Reject mixed offers at server validation, catalogue, and checkout boundaries. Preserve historical order snapshots. Reserve stock for printed purchases and grant ebook access only after verified payment. Keep synthetic browser fixtures outside the production app.
 
 1. **Describe the failure.** Record route/action, exact message, timestamp, environment, account role, and reproduction steps. Separate symptoms from hypotheses.
 2. **Reproduce first.** Capture browser console output, network status/response, Render logs, Supabase logs, and request IDs. Redact passwords, OTPs, API keys, private paths, payment details, and signed URLs.
