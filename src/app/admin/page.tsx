@@ -4,6 +4,7 @@ import { getBooks } from "@/lib/catalog";
 import { getBundles } from "@/lib/bundles";
 import { shippingRates, physicalReadiness } from "@/lib/commerce";
 import { readiness } from "@/lib/readiness";
+import { paymentSettings } from "@/lib/payment-settings";
 import { redirect, notFound } from "next/navigation";
 import { Admin } from "@/components/admin";
 import type { ReviewClaim } from "@/lib/types";
@@ -26,6 +27,7 @@ export default async function Page() {
     { data: physicalOrders, error: physicalError },
     shipping,
     physicalState,
+    payments,
   ] = await Promise.all([
     getBooks(true),
     readiness(),
@@ -42,6 +44,7 @@ export default async function Page() {
       .eq("order_kind", "physical").order("created_at", { ascending: false }).limit(100),
     shippingRates(),
     physicalReadiness(),
+    paymentSettings(),
   ]);
   if (o || p || c || claimError || physicalError) throw o || p || c || claimError || physicalError;
   let claims: ReviewClaim[] = [];
@@ -70,6 +73,7 @@ export default async function Page() {
       physicalOrders={physicalOrders || []}
       shipping={shipping}
       physicalGates={physicalState.gates}
+      paymentSettings={payments}
     />
   );
 }

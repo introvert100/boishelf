@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { requireUser } from "@/lib/auth";
-import { bkashNumber } from "@/lib/config";
+import { paymentSettings } from "@/lib/payment-settings";
 import { serviceClient } from "@/lib/supabase";
 import { readiness } from "@/lib/readiness";
 import { AppError, apiError, checkOrigin, jsonBody, rateLimit } from "@/lib/http";
@@ -14,7 +14,7 @@ export async function POST(request: Request) {
     await rateLimit(`checkout:${user.id}`, 5, 60);
     const input = schema.parse(await jsonBody(request));
     if (!(await readiness()).ready) throw new AppError(503, "bKash checkout is not available yet.");
-    const number = bkashNumber();
+    const { receivingNumber: number } = await paymentSettings();
     if (!number) throw new AppError(503, "bKash receiving number is not configured.");
     const { data: order, error } = await serviceClient().rpc("create_manual_order", {
       p_user: user.id, p_book: input.bookId, p_number: number,

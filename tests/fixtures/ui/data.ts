@@ -1,5 +1,5 @@
 import { demoBooks } from "../../../src/lib/demo";
-import type { Bundle } from "../../../src/lib/types";
+import type { Bundle, Order, ReviewClaim } from "../../../src/lib/types";
 
 export const fixtureUser = { id: "11111111-1111-4111-8111-111111111111", email: "fixture@gmail.com",
   email_confirmed_at: "2026-01-01T00:00:00Z", app_metadata: { provider: "email", providers: ["email"] },
@@ -24,3 +24,12 @@ export const printedPair: Bundle = { ...mixed, id: "23232323-2323-4232-8232-2323
 export const ebookPair: Bundle = { ...mixed, id: "24242424-2424-4242-8242-242424242424", slug: "ebook-pair", kind: "ebook",
   title_en: "Ebook Pair", title_bn: "ইবুক জোড়া", description_en: "Two ebooks at one price.",
   members: [{...books[0], bundle_format: "ebook"}, {...books[3], bundle_format: "ebook"}] };
+
+export const pendingOrder: Order = { id: "45454545-4545-4454-8454-454545454545", user_id: fixtureUser.id,
+  book_id: books[0].id, book_title: "Ebook Pair", amount_paisa: 30000, mode: "live",
+  order_kind: "ebook_bundle", payment_method: "bkash_manual", manual_receive_number: "01712345678",
+  status: "pending", tran_id: "RR-FIXTURE", created_at: "2026-10-20T10:00:00Z" };
+export const submittedClaim: ReviewClaim = { id: "56565656-5656-4565-8565-565656565656",
+  order_id: pendingOrder.id, transaction_id: "FIXTURE123", sender_last4: "1234", status: "submitted",
+  rejection_reason: null, submitted_at: "2026-10-20T10:01:00Z", decided_at: null,
+  order: { ...pendingOrder, status: "review" }, customerEmail: "customer@gmail.com" };

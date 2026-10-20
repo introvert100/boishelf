@@ -8,6 +8,7 @@ import { districts } from "@/lib/commerce-validation";
 import { bundleIsAvailable, printedBundleMembers } from "@/lib/bundle-selection";
 import type { Book, Bundle, CartLine, Order, OrderLine, OrderShipping, Viewer } from "@/lib/types";
 import { Cover, Price, statusLabel, useLanguage } from "./store";
+import { CopyPaymentNumber } from "./copy-payment-number";
 
 function title(value: { title_bn: string; title_en: string }, locale: string) {
   return locale === "bn" ? value.title_bn : value.title_en;
@@ -287,7 +288,7 @@ export function PhysicalOrderView({ order, shipping, lines, rejectionReason }: {
         "Pay the full amount to the courier at delivery. Do not send money in advance for this COD order.")}</p>}
     {order.payment_method === "bkash_manual" && ["pending","rejected"].includes(order.status) && shipping.fulfillment_status === "placed" && <div className="panel admin-form">
       <h2>{t("bKash দিয়ে পরিশোধ করুন", "Pay with bKash")}</h2>
-      <p>{t("নম্বর", "Receiving number")}: <strong>{order.manual_receive_number}</strong></p>
+      <p>{t("নম্বর", "Receiving number")}: <CopyPaymentNumber key={order.manual_receive_number} number={order.manual_receive_number} /></p>
       <p>{t("ঠিক এই টাকা পাঠান", "Send this exact total")}: <strong><Price paisa={order.amount_paisa} /></strong></p>
       <p>{t("রেফারেন্স", "Reference")}: {order.tran_id}</p>
       {rejectionReason && <p className="notice error" role="alert">{t("আগের দাবির কারণ", "Previous claim rejected because")}: {rejectionReason}</p>}
@@ -300,7 +301,7 @@ export function PhysicalOrderView({ order, shipping, lines, rejectionReason }: {
         <button className="button" disabled={busy}>{t("যাচাইয়ের জন্য জমা দিন", "Submit for review")}</button>
       </form>
     </div>}
-    {order.status === "review" && <p className="notice">{t("আপনার bKash দাবি যাচাই হচ্ছে।", "Your bKash claim is under review.")}</p>}
+    {order.status === "review" && <p className="notice">{t("আপনার bKash দাবি অনুমোদনের অপেক্ষায় আছে।", "Your bKash claim is awaiting approval.")}</p>}
     {shipping.fulfillment_status === "placed" && ["pending","rejected"].includes(order.status) && <button className="button secondary" disabled={busy}
       onClick={() => { if (window.confirm(t("আপনি কি নিশ্চিত? bKash-এ টাকা পাঠিয়ে থাকলে বাতিল করবেন না; আগে সহায়তার সঙ্গে যোগাযোগ করুন।",
         "Cancel this order? If you already sent bKash money, contact support instead."))) void action(`/api/orders/${order.id}/cancel`); }}>{t("অর্ডার বাতিল করুন", "Cancel order")}</button>}

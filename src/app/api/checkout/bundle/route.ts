@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { requireUser } from "@/lib/auth";
-import { bkashNumber } from "@/lib/config";
+import { paymentSettings } from "@/lib/payment-settings";
 import { readiness } from "@/lib/readiness";
 import { serviceClient } from "@/lib/supabase";
 import { AppError, apiError, checkOrigin, jsonBody, rateLimit } from "@/lib/http";
@@ -12,10 +12,11 @@ export async function POST(request: Request) {
     const user = await requireUser();
     await rateLimit(`bundle-checkout:${user.id}`, 5, 60);
     const data = input.parse(await jsonBody(request));
-    if (!(await readiness()).ready || !bkashNumber())
+    const { receivingNumber } = await paymentSettings();
+    if (!(await readiness()).ready || !receivingNumber)
       throw new AppError(503, "bKash checkout is not available yet.");
     const { data: order, error } = await serviceClient().rpc("create_ebook_bundle_order", {
-      p_user: user.id, p_bundle: data.bundleId, p_number: bkashNumber(),
+      p_user: user.id, p_bundle: data.bundleId, p_number: receivingNumber,
     });
     if (error) {
       if (error.message.includes("already_owned"))

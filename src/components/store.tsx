@@ -43,6 +43,7 @@ import { isGmailUser } from "@/lib/security";
 import { Turnstile } from "@/components/turnstile";
 import { PreviewDialog } from "@/components/preview-dialog";
 import { addToCart } from "@/lib/cart";
+import { CopyPaymentNumber } from "./copy-payment-number";
 
 const Language = createContext<{
   locale: Locale;
@@ -1198,7 +1199,7 @@ export function statusLabel(status: string, locale: Locale) {
   };
   const en: Record<string, string> = {
     paid: "Paid", pending: "Awaiting payment", failed: "Failed",
-    cancelled: "Cancelled", review: "Under review", refunded: "Refunded",
+    cancelled: "Cancelled", review: "Awaiting approval", refunded: "Refunded",
     rejected: "Claim rejected",
   };
   return (locale === "bn" ? bn : en)[status] || status;
@@ -1272,7 +1273,7 @@ export function OrderView({ initial, initialClaim, bundleSnapshot }: {
         {order.payment_method === "bkash_manual" && (order.status === "pending" || order.status === "rejected") && (
           <div className="notice manual-payment">
             <h2>{t("bKash-এ পেমেন্ট করুন", "Pay with bKash")}</h2>
-            <p>{t("গ্রহণকারীর নম্বর", "Receiving number")}: <strong>{order.manual_receive_number}</strong></p>
+            <p>{t("গ্রহণকারীর নম্বর", "Receiving number")}: <CopyPaymentNumber key={order.manual_receive_number} number={order.manual_receive_number} /></p>
             <p>{t("ঠিক এই পরিমাণ পাঠান", "Send this exact amount")}: <strong><Price paisa={order.amount_paisa} /></strong></p>
             <p>{t("সম্ভব হলে bKash রেফারেন্সে এটি লিখুন", "Use this payment reference if bKash allows it")}: <strong>{order.tran_id}</strong></p>
             <p>{t("bKash অ্যাপ বা USSD-এ পেমেন্ট সম্পন্ন করুন। শুধু আইডি জমা দিলে বই খুলবে না। আপনার PIN বা OTP এখানে দেবেন না।", "Complete the payment in bKash. Submitting an ID alone does not unlock the book. Never enter your bKash PIN or OTP here.")}</p>

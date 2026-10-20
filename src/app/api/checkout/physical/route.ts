@@ -1,6 +1,6 @@
 import { requireUser } from "@/lib/auth";
 import { physicalReadiness, quotePhysicalCart } from "@/lib/commerce";
-import { bkashNumber } from "@/lib/config";
+import { paymentSettings } from "@/lib/payment-settings";
 import { physicalCheckoutInput } from "@/lib/commerce-validation";
 import { serviceClient } from "@/lib/supabase";
 import { AppError, apiError, checkOrigin, jsonBody, rateLimit } from "@/lib/http";
@@ -21,7 +21,7 @@ export async function POST(request: Request) {
       p_user: user.id, p_key: data.clientKey, p_lines: data.lines,
       p_name: data.recipientName, p_phone: data.phone, p_district: data.district,
       p_area: data.localArea, p_street: data.streetAddress, p_method: data.method,
-      p_number: data.method === "bkash_manual" ? bkashNumber() : null,
+      p_number: data.method === "bkash_manual" ? (await paymentSettings()).receivingNumber : null,
       p_expected_total: data.expectedTotalPaisa,
     });
     if (error) {

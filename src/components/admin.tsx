@@ -13,6 +13,8 @@ import {
 import { useLanguage, Price, statusLabel } from "./store";
 import { BookEditor } from "./book-editor";
 import { CommerceAdmin, PrintEditionEditor } from "./commerce-admin";
+import { PaymentSettingsEditor } from "./payment-settings";
+import type { PaymentSettings } from "@/lib/payment-validation";
 import { SuccessToast, type ToastMessage } from "./success-toast";
 import { draftKey, parseBookDraft, type BookFormValues } from "@/lib/book-draft";
 import type { Book, Bundle, Order, OrderLine, OrderShipping, Policy, ReviewClaim } from "@/lib/types";
@@ -29,6 +31,7 @@ export function Admin({
   physicalOrders,
   shipping,
   physicalGates,
+  paymentSettings,
 }: {
   books: Book[];
   orders: Order[];
@@ -41,12 +44,16 @@ export function Admin({
   physicalOrders: (Order & { order_shipping: OrderShipping | OrderShipping[] | null; order_items: OrderLine[] })[];
   shipping: { dhaka_paisa: number | null; outside_paisa: number | null };
   physicalGates: Gate[];
+  paymentSettings: PaymentSettings;
 }) {
   const { t, locale } = useLanguage();
   const router = useRouter();
   const [tab, setTab] = useState("books");
   const [editing, setEditing] = useState<string | null>(null);
+  const [returnToBundle, setReturnToBundle] = useState(false);
+  const [commerceVisited, setCommerceVisited] = useState(false);
   const [recentBook, setRecentBook] = useState<Book | null>(null);
+  const [printedEdits, setPrintedEdits] = useState<Record<string, { print_price_paisa: number; print_on_hand: number }>>({});
   const [savedDraft, setSavedDraft] = useState<BookFormValues | null>(null);
   const [restoredDraft, setRestoredDraft] = useState<BookFormValues | null>(null);
   const [busy, setBusy] = useState(false);
@@ -69,7 +76,7 @@ export function Admin({
     : books).filter((book) => !removedIds.includes(book.id)).map((book) =>
       Object.hasOwn(archiveOverrides, book.id)
         ? { ...book, archived_at: archiveOverrides[book.id], published: archiveOverrides[book.id] ? false : book.published }
-        : book);
+        : book).map((book) => ({ ...book, ...printedEdits[book.id] }));
   const visibleBooks = displayBooks.filter((book) => tab === "archived" ? !!book.archived_at : !book.archived_at);
   useEffect(() => {
     try { setSavedDraft(parseBookDraft(window.localStorage.getItem(draftKey(ownerId)))); }
@@ -160,7 +167,7 @@ export function Admin({
       setError(t("প্রত্যাখ্যানের কারণ ৫–৩০০ অক্ষরে লিখুন।", "Enter a rejection reason of 5–300 characters."));
       return;
     }
-    if (action === "approve" && !window.confirm(t("আপনি কি bKash-এ প্রাপক, পরিমাণ, ট্রানজ্যাকশন আইডি এবং থাকলে রেফারেন্স মিলিয়ে দেখেছেন? অনুমোদন করলে বইটি ডাউনলোড করা যাবে।", "Have you verified the recipient, amount, transaction ID and reference if present in your bKash account? Approval immediately unlocks the book."))) return;
+    if (action === "approve" && !window.confirm(t("আপনি কি bKash-এ প্রাপক, পরিমাণ, ট্রানজ্যাকশন আইডি এবং থাকলে রেফারেন্স মিলিয়ে দেখেছেন? অনুমোদনে ইবুক খুলবে অথবা ছাপা বইয়ের পেমেন্ট নিশ্চিত হবে।", "Have you verified the recipient, amount, transaction ID and reference if present in your bKash account? Approval unlocks purchased ebooks or confirms payment for printed delivery."))) return;
     setBusy(true); setError("");
     try {
       await send(`/api/admin/orders/${claim.order_id}/review`, {
@@ -168,7 +175,9 @@ export function Admin({
       });
       setResolvedClaims((current) => [...current, claim.id]);
       showToast(action === "approve"
-        ? t("পেমেন্ট অনুমোদিত। ক্রেতা এখন বই ডাউনলোড করতে পারবেন।", "Payment approved. The buyer can now download the book.")
+        ? claim.order.order_kind === "physical"
+          ? t("পেমেন্ট অনুমোদিত। ছাপা বইয়ের ডেলিভারি প্রস্তুত করুন।", "Payment approved. Prepare the printed order for delivery.")
+          : t("পেমেন্ট অনুমোদিত। ক্রেতা এখন ইবুক ডাউনলোড করতে পারবেন।", "Payment approved. The buyer can now download the ebooks.")
         : t("দাবি প্রত্যাখ্যান করা হয়েছে। ক্রেতা কারণ দেখে আবার জমা দিতে পারবেন।", "Claim rejected. The buyer can see the reason and resubmit."));
       router.refresh();
     } catch (failure) { setError((failure as Error).message); }
@@ -225,6 +234,7 @@ export function Admin({
           ["archived", "আর্কাইভ", "Archived"],
           ["orders", `অর্ডার (${claims.filter((claim) => !resolvedClaims.includes(claim.id)).length})`, `Orders (${claims.filter((claim) => !resolvedClaims.includes(claim.id)).length})`],
           ["commerce", "ছাপা বই ও বান্ডেল", "Print, bundles & delivery"],
+          ["payments", "পেমেন্ট", "Payments"],
           ["policies", "নীতিমালা", "Policies"],
           ["launch", "প্রকাশের প্রস্তুতি", "Launch readiness"],
         ].map(([id, bn, en]) => (
@@ -234,6 +244,7 @@ export function Admin({
             aria-pressed={tab === id}
             onClick={() => {
               setTab(id);
+              if (id === "commerce") setCommerceVisited(true);
               setNotice("");
               setError("");
             }}
@@ -256,6 +267,9 @@ export function Admin({
         {t("কিছু পুরোনো ফাইল পরিষ্কার করা বাকি আছে।", "Some old files are pending cleanup.")}{" "}
         <button className="button secondary" type="button" disabled={busy} onClick={() => void retryCleanup()}>{t("আবার চেষ্টা করুন", "Retry cleanup")}</button>
       </div>}
+      {returnToBundle && ["books", "archived"].includes(tab) && <div className="notice"><p>{t("বইয়ের সংস্করণ প্রস্তুত করে সংরক্ষণ করুন, তারপর বান্ডেলে ফিরুন। বান্ডেলের লেখা ও বাছাই রাখা হয়েছে।", "Save this book’s edition setup, then return to your bundle. Its details and selections are kept.")}</p>
+        <button type="button" className="button secondary" onClick={() => { setTab("commerce"); setReturnToBundle(false); }}>{t("বান্ডেলে ফিরুন", "Return to bundle")}</button>
+      </div>}
       {tab === "books" && (
         <>
           {savedDraft && !editing && (
@@ -276,7 +290,7 @@ export function Admin({
           )}
           {editing && <BookEditor
             key={editing}
-            book={editing === "new" ? undefined : recentBook?.id === editing ? recentBook : books.find((book) => book.id === editing)}
+            book={editing === "new" ? undefined : displayBooks.find((book) => book.id === editing)}
             ownerId={ownerId}
             restored={editing === "new" ? restoredDraft : null}
             onClose={() => { setEditing(null); setRestoredDraft(null); }}
@@ -327,14 +341,12 @@ export function Admin({
               });
             }}
           />}
-          {editing && editing !== "new" && (recentBook?.id === editing ? recentBook : books.find((book) => book.id === editing)) && <PrintEditionEditor
+          {editing && editing !== "new" && displayBooks.some((book) => book.id === editing) && <PrintEditionEditor
             key={`print-${editing}`}
-            book={(recentBook?.id === editing ? recentBook : books.find((book) => book.id === editing))!}
+            book={displayBooks.find((book) => book.id === editing)!}
             onSuccess={showToast}
-            onSaved={(price, stock) => setRecentBook((current) => {
-              const existing = current?.id === editing ? current : books.find((book) => book.id === editing);
-              return existing ? { ...existing, print_price_paisa: price, print_on_hand: stock } : current;
-            })}
+            onSaved={(price, stock) => setPrintedEdits((current) => ({ ...current,
+              [editing]: { print_price_paisa: price, print_on_hand: stock } }))}
           />}
           <div className="table-wrap">
             <table>
@@ -390,8 +402,10 @@ export function Admin({
           <td><button type="button" className="button secondary" disabled={busy} onClick={() => void restoreBook(book)}><RotateCcw size={16} /> {t("খসড়ায় ফিরিয়ে আনুন", "Restore as draft")}</button></td>
         </tr>)}</tbody></table>}
       </div>}
-      {tab === "commerce" && <CommerceAdmin books={displayBooks} bundles={bundles}
-        physicalOrders={physicalOrders} shipping={shipping} onSuccess={showToast} />}
+      {commerceVisited && <div hidden={tab !== "commerce"}><CommerceAdmin books={displayBooks} bundles={bundles}
+        physicalOrders={physicalOrders} shipping={shipping} onSuccess={showToast}
+        onEditBook={(book) => { setEditing(book.id); setTab(book.archived_at ? "archived" : "books"); setReturnToBundle(true); window.scrollTo({ top: 0, behavior: "smooth" }); }} /></div>}
+      {tab === "payments" && <PaymentSettingsEditor settings={paymentSettings} onSuccess={showToast} />}
       {tab === "orders" && (
         <>
           <p>

@@ -1,6 +1,7 @@
 import "server-only";
 import { serviceClient } from "./supabase";
-import { codCheckoutEnabled, manualCheckoutEnabled, bkashNumber, ownerEmail } from "./config";
+import { codCheckoutEnabled, manualCheckoutEnabled, ownerEmail } from "./config";
+import { paymentSettings } from "./payment-settings";
 import { getBooks } from "./catalog";
 import { getBundles } from "./bundles";
 import { cartInput, districts } from "./commerce-validation";
@@ -16,6 +17,7 @@ export async function shippingRates() {
 }
 
 export async function physicalReadiness() {
+  const { receivingNumber } = await paymentSettings();
   const db = serviceClient();
   const [{ data: policies, error: policyError }, rates, { data: stock, error: stockError }] = await Promise.all([
     db.from("policies").select("slug,body_bn,body_en").eq("published", true),
@@ -37,7 +39,7 @@ export async function physicalReadiness() {
     catalogueReady && rates.dhaka_paisa !== null && rates.outside_paisa !== null;
   return {
     cod: baseReady && codCheckoutEnabled(),
-    bkash: baseReady && manualCheckoutEnabled() && !!bkashNumber(),
+    bkash: baseReady && manualCheckoutEnabled() && !!receivingNumber,
     gates: [
       { key: "courier", label: "COD-capable courier confirmed", passed: process.env.COD_COURIER_CONFIRMED === "true" },
       { key: "shipping", label: "Dhaka and outside-Dhaka fees configured", passed: rates.dhaka_paisa !== null && rates.outside_paisa !== null },

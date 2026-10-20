@@ -1,5 +1,13 @@
 # Read and Rich order operations
 
+## Set the receiving number
+
+Open `/admin` → **Payments**, enter your eligible 11-digit business bKash number and save. A success toast confirms the server saved it; refresh to check. This overrides the original Render number for new orders only. Pending and retried orders keep their original number: reconcile against that number and keep access to the previous account until those orders are resolved. Saving a number does not enable checkout or approve a payment. Check **Launch readiness** for missing policies and enable flags.
+
+## Prepare bundle books
+
+Choose **Printed only** or **Ebooks only** in **Print, bundles & delivery**. Every book stays visible with its editions and any blocking reason. Use its setup button to add the printed price/stock or ebook files, publish it if needed, then choose **Return to bundle**. The unfinished bundle and selected books stay in place while you prepare other books. Select 2–10 different eligible books of one format. Stock is checked again at checkout; draft, archived and sample books cannot be sold in bundles.
+
 ## Review an order
 
 Open `/admin` → **Orders**. For every submitted claim, independently check the **receiving number, exact amount, bKash transaction ID, sender last four digits and order reference when present** against your bKash app or statement. A buyer-entered ID or screenshot is not payment proof. If the transfer matches, choose **Verified — approve**; this atomically marks the order paid and grants one live entitlement. If it does not match, enter a specific reason and reject the claim. The buyer sees that reason and can submit corrected details. Do not approve uncertain or duplicated transfers.

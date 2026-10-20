@@ -59,8 +59,24 @@ test("PostgreSQL migration, access policies and atomic payment transitions", asy
     }>(
       "select relname,relrowsecurity from pg_class join pg_namespace on pg_namespace.oid=relnamespace where nspname='public' and relkind='r'",
     );
-    assert.equal(rows.length, 21);
+    assert.equal(rows.length, 22);
     assert.ok(rows.every((r) => r.relrowsecurity));
+  });
+  await t.test("payment settings are service-only with validated number and owner audit", async () => {
+    for (const role of ["anon", "authenticated"]) {
+      await assert.rejects(asRole(role, reader, () => db.query("select * from payment_settings")));
+      await assert.rejects(asRole(role, reader, () => db.query("update payment_settings set receiving_number='01712345678'")));
+      await assert.rejects(asRole(role, reader, () => db.query("insert into payment_settings(id) values('other')")));
+      await assert.rejects(asRole(role, reader, () => db.query("delete from payment_settings")));
+    }
+    await asRole("service_role", null, async () => {
+      await db.query("update payment_settings set receiving_number='01812345678',updated_by=$1 where id='default'", [reader]);
+      const saved = (await db.query<{ receiving_number: string; updated_by: string }>("select * from payment_settings")).rows[0];
+      assert.equal(saved.receiving_number, "01812345678");
+      assert.equal(saved.updated_by, reader);
+    });
+    await assert.rejects(db.query("update payment_settings set receiving_number='invalid'"));
+    assert.equal((await db.query<{ receiving_number: string | null }>("select receiving_number from payment_settings")).rows[0].receiving_number, null);
   });
   await t.test("free-tier ebook bucket accepts 50 MB files and remains private", async () => {
     const { rows } = await db.query<{ file_size_limit: number; public: boolean }>(
@@ -475,15 +491,17 @@ test("PostgreSQL migration, access policies and atomic payment transitions", asy
     await db.query("insert into book_formats(book_id,format,storage_path,original_name,size_bytes) values($1,'epub','private/manual.epub','manual.epub',100)", [manualBook]);
     await assert.rejects(asRole("authenticated", reader,
       () => db.query("select create_manual_order($1,$2,$3)", [reader, manualBook, "01712345678"])));
+    await db.query("update payment_settings set receiving_number='01712345678',updated_by=$1 where id='default'", [reader]);
     const created = (await db.query<{ v: { id: string; amount_paisa: number; reused: boolean; mode: string; payment_method: string; manual_receive_number: string } }>(
-      "select create_manual_order($1,$2,$3) as v", [reader, manualBook, "01712345678"])).rows[0].v;
+      "select create_manual_order($1,$2,(select receiving_number from payment_settings where id='default')) as v", [reader, manualBook])).rows[0].v;
     assert.equal(created.amount_paisa, 34900);
     assert.equal(created.mode, "live");
     assert.equal(created.payment_method, "bkash_manual");
     assert.equal(created.manual_receive_number, "01712345678");
     assert.equal((await db.query("select * from payment_attempts where order_id=$1", [created.id])).rows.length, 0);
+    await db.query("update payment_settings set receiving_number='01812345678' where id='default'");
     const retry = (await db.query<{ v: { id: string; reused: boolean; manual_receive_number: string } }>(
-      "select create_manual_order($1,$2,$3) as v", [reader, manualBook, "01812345678"])).rows[0].v;
+      "select create_manual_order($1,$2,(select receiving_number from payment_settings where id='default')) as v", [reader, manualBook])).rows[0].v;
     assert.equal(retry.id, created.id);
     assert.equal(retry.reused, true);
     assert.equal(retry.manual_receive_number, "01712345678");
@@ -496,8 +514,10 @@ test("PostgreSQL migration, access policies and atomic payment transitions", asy
       () => db.query("select * from manual_payment_claims")));
     await assert.rejects(asRole("authenticated", reader,
       () => db.query("select approve_manual_claim($1,$2,$3)", [created.id, firstClaim, reader])));
-    const otherOrder = (await db.query<{ v: { id: string } }>(
-      "select create_manual_order($1,$2,$3) as v", [other, manualBook, "01712345678"])).rows[0].v;
+    const otherOrder = (await db.query<{ v: { id: string; manual_receive_number: string } }>(
+      "select create_manual_order($1,$2,(select receiving_number from payment_settings where id='default')) as v", [other, manualBook])).rows[0].v;
+    assert.equal(otherOrder.manual_receive_number, "01812345678");
+    assert.equal((await db.query<{ manual_receive_number: string }>("select manual_receive_number from orders where id=$1", [created.id])).rows[0].manual_receive_number, "01712345678");
     await assert.rejects(db.query("select submit_manual_claim($1,$2,$3,$4)", [other, otherOrder.id, "ABC123456", "5678"]));
     await db.query("select reject_manual_claim($1,$2,$3,$4)", [created.id, firstClaim, other, "Transfer not found"]);
     assert.equal((await db.query("select * from entitlements where book_id=$1 and mode='live'", [manualBook])).rows.length, 0);

@@ -19,6 +19,7 @@ export function PrintEditionEditor({ book, onSaved, onSuccess }: {
   book: Book; onSaved: (price: number, stock: number) => void; onSuccess: (message: string) => void;
 }) {
   const { t } = useLanguage();
+  const router = useRouter();
   const [price, setPrice] = useState(book.print_price_paisa != null ? String(book.print_price_paisa / 100) : "");
   const [stock, setStock] = useState(String(book.print_on_hand || 0));
   const [reason, setReason] = useState("");
@@ -32,6 +33,7 @@ export function PrintEditionEditor({ book, onSaved, onSuccess }: {
       });
       onSaved(Math.round(Number(price) * 100), Number(stock));
       onSuccess(t("ছাপা সংস্করণ ও মজুত সংরক্ষিত হয়েছে।", "Printed edition and stock saved."));
+      router.refresh();
       setReason("");
     } catch (failure) { setError((failure as Error).message); }
     finally { setBusy(false); }
@@ -64,10 +66,11 @@ type BundleDraft = { id?: string; slug: string; kind: EditionFormat | "";
   price: string; published: boolean; members: { bookId: string; format: EditionFormat }[] };
 const blankBundle: BundleDraft = { slug: "", kind: "physical", title_bn: "", title_en: "",
   description_bn: "", description_en: "", price: "", published: false, members: [] };
-export function CommerceAdmin({ books, bundles, physicalOrders, shipping, onSuccess }: {
+export function CommerceAdmin({ books, bundles, physicalOrders, shipping, onSuccess, onEditBook }: {
   books: Book[]; bundles: Bundle[]; physicalOrders: PhysicalAdminOrder[];
   shipping: { dhaka_paisa: number | null; outside_paisa: number | null };
   onSuccess: (message: string) => void;
+  onEditBook?: (book: Book) => void;
 }) {
   const { locale, t } = useLanguage();
   const router = useRouter();
@@ -134,6 +137,7 @@ export function CommerceAdmin({ books, bundles, physicalOrders, shipping, onSucc
       published: !!kind && bundle.published, members: kind
         ? bundle.members.map((member) => ({ bookId: member.id, format: kind })) : [] });
   }
+  const eligibleCount = draft.kind ? books.filter((book) => !bundleBookIssue(book, draft.kind as EditionFormat)).length : 0;
   return <div className="commerce-admin">
     {error && <p className="notice error" role="alert">{error}</p>}
     <form className="panel admin-form" onSubmit={(event) => void saveShipping(event)}>
@@ -166,6 +170,9 @@ export function CommerceAdmin({ books, bundles, physicalOrders, shipping, onSucc
         <label>{t("বান্ডেলের মোট দাম (টাকা)", "Bundle total price (BDT)")}<input type="number" min="10" max="100000" step="0.01" required value={draft.price} onChange={(event) => setDraft({ ...draft, price: event.target.value })} /></label>
         <fieldset className="bundle-member-picker"><legend>{t("অন্তত দুটি বই বাছুন", "Choose at least two books")}</legend>
           <p className="field-help">{t("বান্ডেলের সব বই একই ধরনের হতে হবে: শুধু ছাপা বই অথবা শুধু ইবুক। বাছা যাচ্ছে না এমন বইয়ের পাশে কারণ দেখুন।", "Every book must match the bundle format: printed only or ebooks only. Unavailable books explain what to fix.")}</p>
+          {draft.kind && <p role="status">{draft.kind === "physical" ? t("ছাপা বান্ডেলের জন্য প্রস্তুত বই", "Books ready for a printed bundle") : t("ইবুক বান্ডেলের জন্য প্রস্তুত বই", "Books ready for an ebook bundle")}: {eligibleCount}
+            {eligibleCount < 2 && <> · {t("অন্তত দুটি বই প্রস্তুত করুন। নিচে বইয়ের সেটআপ খুলুন।", "Prepare at least two books. Open book setup below.")}</>}
+          </p>}
           {!draft.kind && <p className="notice">{t("এই পুরোনো বান্ডেলটি বিক্রি করা যাবে না। একটি ধরন বেছে অন্তত দুটি উপযুক্ত বই বাছুন। আগের অর্ডার থাকবে।", "This old bundle cannot be sold. Choose one format and at least two eligible books. Previous orders are preserved.")}</p>}
           {books.map((book) => {
             const issue = bundleBookIssue(book, draft.kind || "physical");
@@ -175,7 +182,12 @@ export function CommerceAdmin({ books, bundles, physicalOrders, shipping, onSucc
                 onChange={(event) => setDraft({ ...draft, members: event.target.checked
                   ? [...draft.members, { bookId: book.id, format: draft.kind as EditionFormat }]
                   : draft.members.filter((member) => member.bookId !== book.id) })} /> {name(book, locale)}</label>
-              <small>{!draft.kind ? t("উপরে বান্ডেলের ধরন বাছুন।", "Choose the bundle format above.") : issue ? issueLabels[issue] : [hasEdition(book, "physical") ? t("ছাপা সংস্করণ আছে", "Printed edition available") : "", hasEdition(book, "ebook") ? t("ইবুক আছে", "Ebook available") : ""].filter(Boolean).join(" · ")}</small>
+              <small>{t("সংস্করণ", "Editions")}: {[hasEdition(book, "physical") ? t("ছাপা", "Printed") : "", hasEdition(book, "ebook") ? t("ইবুক", "Ebook") : ""].filter(Boolean).join(" · ") || t("এখনো নেই", "None yet")}</small>
+              {issue && <small>{issueLabels[issue]}</small>}
+              {onEditBook && issue && <button type="button" className="button secondary" onClick={() => onEditBook(book)}
+                aria-label={`${t("বইয়ের সেটআপ খুলুন", "Open book setup")}: ${name(book, locale)}`}>
+                {issue === "archived" ? t("আর্কাইভে খুলুন", "Open in Archived") : issue === "physical" ? t("ছাপা সংস্করণ সেট করুন", "Set up printed edition") : issue === "ebook" ? t("ইবুক আপলোড করুন", "Upload ebook") : t("বইয়ের সেটআপ খুলুন", "Open book setup")}
+              </button>}
             </div>;
           })}
           {!books.length && <p className="field-help">{t("আগে দুটি বই যোগ করুন।", "Add at least two books first.")}</p>}

@@ -4,6 +4,8 @@
 
 Back up the Supabase project. Apply every unapplied file in `supabase/migrations/` in filename order. The existing store already has `20261017102902_mixed_bundles.sql`, which backfilled bundle/order member formats. The subsequent **single-format-only** update needs no new migration: the application rejects mixed saves and orders and hides old combined offers. Existing order snapshots remain available for fulfillment. Do not remove or rerun historical migrations, or mix SQL Editor and CLI migration history blindly.
 
+For the Admin payment-settings release, apply `20261020103721_admin_payment_settings.sql` **before deploying the application**. It creates one service-only settings row; existing orders and claims are unchanged. Verify RLS and service-role select/update grants, with no `anon`/`authenticated` grants. A missing migration or settings read failure stops checkout rather than falling back to an obsolete receiving number.
+
 Verify RLS on `print_editions`, `bundles`, `bundle_members`, `order_items`, `order_item_members`, `order_shipping`, `fulfillment_events`, and `inventory_events`. The `ebooks` and `covers` buckets remain private. Run `npm run db:test` locally before deploying.
 
 ## 2. Configure existing services
@@ -12,7 +14,7 @@ Keep the existing Supabase URL, publishable key, server secret, Gmail OTP/Brevo 
 
 Use a bKash **Personal Retail or Merchant** account for receiving customer payments. bKash says its [personal app is for personal use](https://www.bkash.com/en/page/terms-of-use-bkash-app), while its [Personal Retail Account](https://www.bkash.com/en/page/personal-retail-account) can receive customer payments without this store calling a payment API. Do not put a personal receiving number into checkout.
 
-In Render, set `BKASH_RECEIVE_NUMBER` to the eligible 11-digit number. Confirm its exact payment method with bKash and test it yourself. Publish real books and your final Privacy, Terms, Refund, Copyright, and Shipping policies in Bangla and English. For printed sales, set Dhaka/outside-Dhaka fees, actual on-hand stock, and a COD-capable courier arrangement. Test a controlled COD delivery. Only then set `COD_COURIER_CONFIRMED=true` and `COD_ENABLED=true`. Separately, set `BKASH_BUSINESS_ACCOUNT_CONFIRMED=true` and `MANUAL_BKASH_ENABLED=true` only after a real transfer and review test. Change flags in **both** the Blueprint and Render; Blueprint sync may reset a dashboard-only value.
+After deployment, open **Admin → Payments**, enter the eligible 11-digit receiving number and click **Save bKash number**. Refresh and verify it remains saved. `BKASH_RECEIVE_NUMBER` in Render is an optional bootstrap fallback until the first Admin save; the saved setting then takes precedence without redeploying. Existing and retried orders keep their original number. Confirm the exact payment method with bKash and test it yourself. Publish real books and your final Privacy, Terms, Refund, Copyright, and Shipping policies in Bangla and English. For printed sales, set Dhaka/outside-Dhaka fees, actual on-hand stock, and a COD-capable courier arrangement. Test a controlled COD delivery. Only then set `COD_COURIER_CONFIRMED=true` and `COD_ENABLED=true`. Separately, set `BKASH_BUSINESS_ACCOUNT_CONFIRMED=true` and `MANUAL_BKASH_ENABLED=true` only after a real transfer and review test. Saving a number does not bypass these gates. Change flags in **both** the Blueprint and Render; Blueprint sync may reset a dashboard-only value.
 
 ## 3. Connect readandrich.com
 
@@ -33,3 +35,5 @@ Test a printed-only book, printed bundle, and ebook bundle. Confirm mixed offers
 ## Rollback
 
 Set `COD_ENABLED=false` and `MANUAL_BKASH_ENABLED=false` in both the Blueprint and Render, then redeploy to stop new orders. Keep order status and Admin review available for existing orders. Before rolling back to code from before mixed bundles, unpublish mixed bundles and finish or reconcile their payments/fulfillment using the new code. Older code does not understand mixed orders. Preserve the migration, snapshots, and orders; restore a tested backup only if the database itself is damaged.
+
+Before rolling back to code that reads only `BKASH_RECEIVE_NUMBER`, align that environment value with the number saved in Admin. Leave the settings table and existing order payment instructions in place.
