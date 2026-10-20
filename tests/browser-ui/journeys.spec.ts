@@ -62,6 +62,8 @@ test("bundle editor offers only printed or ebook bundles and saves matching edit
   const picker = page.getByRole("group", {name: "Choose at least two books"});
   await expect(picker.getByRole("checkbox")).toHaveCount(4);
   const format = page.getByRole("combobox", {name: "Format", exact: true});
+  await expect(format).toHaveValue("ebook");
+  await format.selectOption("physical");
   await expect(format.locator("option")).toHaveCount(2);
   await expect(format.locator('option[value="mixed"]')).toHaveCount(0);
   await expect(picker.getByRole("checkbox", {name: "Ebook Only"})).toBeDisabled();
@@ -127,7 +129,8 @@ test("bundle setup keeps both printed editions and the unfinished bundle", async
   page.on("pageerror", (error) => errors.push(error.message));
   await page.route("**/api/admin/print-editions/*", (route) => route.fulfill({json: {ok: true}}));
   await page.goto("/admin-editor"); await english(page);
-  await page.getByRole("button", {name: "Print, bundles & delivery", exact: true}).click();
+  await page.getByRole("button", {name: "Bundles", exact: true}).click();
+  await page.getByRole("combobox", {name: "Format", exact: true}).selectOption("physical");
   const picker = page.getByRole("group", {name: "Choose at least two books"});
   await page.getByLabel("URL slug").fill("keep-my-bundle");
   await expect(picker.getByRole("checkbox", {name: "Setup First"})).toBeDisabled();
@@ -146,6 +149,49 @@ test("bundle setup keeps both printed editions and the unfinished bundle", async
   await picker.getByRole("checkbox", {name: "Setup Second"}).check();
   await expect(page.getByRole("button", {name: "Save bundle", exact: true})).toBeEnabled();
   await picker.screenshot({path: `test-results/bundle-setup-${info.project.name}.png`});
+  expect(errors).toEqual([]);
+});
+
+test("Admin Bundles opens PDF ebooks directly and keeps delivery separate", async ({page}, info) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await page.goto("/admin-editor?ebooks=1"); await english(page);
+  await page.getByRole("button", {name: "Bundles", exact: true}).click();
+  await expect(page.getByRole("heading", {name: "New ebook bundle (PDF / EPUB)", exact: true})).toBeVisible();
+  const format = page.getByRole("combobox", {name: "Format", exact: true});
+  await expect(format).toHaveValue("ebook");
+  await expect(page.getByRole("heading", {name: "Delivery fees", exact: true})).toBeHidden();
+  await expect(page.getByRole("heading", {name: "Printed-book orders", exact: true})).toBeHidden();
+  const picker = page.getByRole("group", {name: "Choose at least two books"});
+  await expect(picker.getByRole("checkbox", {name: "Print Only"})).toBeDisabled();
+  await picker.getByRole("checkbox", {name: "Ebook Only"}).check();
+  await picker.getByRole("checkbox", {name: "Both Editions"}).check();
+  await page.getByLabel("URL slug").fill("pdf-pair");
+  await page.getByLabel("Bangla title").fill("দুটি পিডিএফ");
+  await page.getByLabel("English title", {exact: true}).fill("PDF pair");
+  await page.getByLabel("Bangla description").fill("দুটি পিডিএফ একসঙ্গে পড়ুন।");
+  await page.getByLabel("English description", {exact: true}).fill("Two PDF ebooks together.");
+  await page.getByLabel("Bundle total price (BDT)").fill("300");
+  await page.getByLabel("Published", {exact: true}).check();
+  await page.getByRole("button", {name: "Printed & delivery", exact: true}).click();
+  await expect(page.getByRole("heading", {name: "Delivery fees", exact: true})).toBeVisible();
+  await expect(page.getByRole("heading", {name: "New ebook bundle (PDF / EPUB)", exact: true})).toBeHidden();
+  await page.getByRole("button", {name: "Bundles", exact: true}).click();
+  await expect(page.getByLabel("URL slug")).toHaveValue("pdf-pair");
+  await expect(picker.getByRole("checkbox", {name: "Ebook Only"})).toBeChecked();
+  await expect(picker.getByRole("checkbox", {name: "Both Editions"})).toBeChecked();
+  let saved: { kind: string; members: {format: string}[] } | undefined;
+  await page.route("**/api/admin/bundles", async (route) => {
+    saved = route.request().postDataJSON(); await route.fulfill({json: {id: "fixture"}});
+  });
+  await page.screenshot({path: `test-results/admin-ebook-bundles-${info.project.name}.png`, fullPage: true});
+  const saveRefresh = page.waitForResponse((response) => new URL(response.url()).pathname === "/admin-editor" && response.request().headers().rsc === "1");
+  await page.getByRole("button", {name: "Save bundle", exact: true}).click();
+  await expect(page.getByText("Bundle saved.", {exact: true})).toBeVisible();
+  await (await saveRefresh).finished();
+  expect(saved?.kind).toBe("ebook");
+  expect(saved?.members.map((member) => member.format)).toEqual(["ebook", "ebook"]);
+  await expect(format).toHaveValue("ebook");
   expect(errors).toEqual([]);
 });
 

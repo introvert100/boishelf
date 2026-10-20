@@ -6,7 +6,7 @@ Open `/admin` → **Payments**, enter your eligible 11-digit business bKash numb
 
 ## Prepare bundle books
 
-Choose **Printed only** or **Ebooks only** in **Print, bundles & delivery**. Every book stays visible with its editions and any blocking reason. Use its setup button to add the printed price/stock or ebook files, publish it if needed, then choose **Return to bundle**. The unfinished bundle and selected books stay in place while you prepare other books. Select 2–10 different eligible books of one format. Stock is checked again at checkout; draft, archived and sample books cannot be sold in bundles.
+Open **Admin → Bundles**. It starts with **Ebooks only (PDF / EPUB)**: select 2–10 published books with ebook files, enter the bundle details/price, and save. Ebook bundles do not need printed stock or delivery fees. Choose **Printed only** for a printed bundle. Every book stays visible with its editions and any blocking reason. Use its setup button to add the missing edition or publish the book, then choose **Return to bundle**. Entries and selections survive switching sections or preparing another book. Stock is checked again at checkout; draft, archived and sample books cannot be sold in bundles. Delivery fees and the fulfillment queue live separately under **Printed & delivery**.
 
 ## Review an order
 
@@ -18,7 +18,7 @@ Customers can refresh `/orders/<id>` to see pending, under-review, rejected or p
 
 New bundles contain printed books only or ebooks only. Combined offers cannot be purchased. Historical combined orders, if any, remain in the delivery queue with their original snapshots and payment/download rules so the owner can fulfill or refund them. Do not delete those records to remove the old offer type. Independently purchased ebook access remains valid after another order is refunded.
 
-Open `/admin` → **Commerce** to see the private address and saved item/price snapshot. Enter a delivery target for each order. Book a COD-capable courier manually, enter its name and tracking number, then mark the order shipped. The buyer sees progress in **My Orders**; no email or courier API is sent. Stock is reserved when ordered and remains reserved until dispatch or pre-dispatch cancellation. Dispatch consumes it. Cancel a pending order before dispatch to release stock; a paid bKash order cancelled before dispatch requires a manual refund. After a return, inspect the books and adjust on-hand stock with a recorded reason before selling them again.
+Open `/admin` → **Printed & delivery** to see the private address and saved item/price snapshot. Enter a delivery target for each order. Book a COD-capable courier manually, enter its name and tracking number, then mark the order shipped. The buyer sees progress in **My Orders**; no email or courier API is sent. Stock is reserved when ordered and remains reserved until dispatch or pre-dispatch cancellation. Dispatch consumes it. Cancel a pending order before dispatch to release stock; a paid bKash order cancelled before dispatch requires a manual refund. After a return, inspect the books and adjust on-hand stock with a recorded reason before selling them again.
 
 Mark COD **paid only after** the courier delivers and you actually receive the cash. If a buyer says they sent bKash money before cancellation, reconcile it first. Returns and refunds need an explicit admin action; keep the courier and refund references in your own records. Do not put private addresses, PINs, OTPs, or signed download links into logs or support screenshots.
 

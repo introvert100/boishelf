@@ -37,6 +37,8 @@ New bundles contain only printed books or only ebooks; never combine editions. R
 
 Keep per-book edition edits and unfinished bundle selections when navigating to book setup. Admin → Payments stores the receiving number service-only; it overrides the environment bootstrap value for new orders. Preserve existing order number snapshots and checkout gates; never fall back to an old number on a settings read failure.
 
+Keep Admin → Bundles easy to find, defaulting to ebooks (PDF/EPUB); place delivery settings and fulfillment under Printed & delivery. Switching these sections must preserve the unfinished bundle.
+
 1. **Describe the failure.** Record route/action, exact message, timestamp, environment, account role, and reproduction steps. Separate symptoms from hypotheses.
 2. **Reproduce first.** Capture browser console output, network status/response, Render logs, Supabase logs, and request IDs. Redact passwords, OTPs, API keys, private paths, payment details, and signed URLs.
 3. **Trace the boundary.** Check, in order: UI state/validation; API request/response; auth/session; Supabase database/RLS, stock and order transactions; Storage; Brevo; bKash claim/review or COD fulfillment; Render configuration/deployment.

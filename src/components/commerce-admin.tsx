@@ -64,13 +64,14 @@ type PhysicalAdminOrder = Order & { order_shipping: OrderShipping | OrderShippin
 type BundleDraft = { id?: string; slug: string; kind: EditionFormat | "";
   title_bn: string; title_en: string; description_bn: string; description_en: string;
   price: string; published: boolean; members: { bookId: string; format: EditionFormat }[] };
-const blankBundle: BundleDraft = { slug: "", kind: "physical", title_bn: "", title_en: "",
+const blankBundle: BundleDraft = { slug: "", kind: "ebook", title_bn: "", title_en: "",
   description_bn: "", description_en: "", price: "", published: false, members: [] };
-export function CommerceAdmin({ books, bundles, physicalOrders, shipping, onSuccess, onEditBook }: {
+export function CommerceAdmin({ books, bundles, physicalOrders, shipping, onSuccess, onEditBook, section = "all" }: {
   books: Book[]; bundles: Bundle[]; physicalOrders: PhysicalAdminOrder[];
   shipping: { dhaka_paisa: number | null; outside_paisa: number | null };
   onSuccess: (message: string) => void;
   onEditBook?: (book: Book) => void;
+  section?: "bundles" | "delivery" | "all";
 }) {
   const { locale, t } = useLanguage();
   const router = useRouter();
@@ -140,7 +141,7 @@ export function CommerceAdmin({ books, bundles, physicalOrders, shipping, onSucc
   const eligibleCount = draft.kind ? books.filter((book) => !bundleBookIssue(book, draft.kind as EditionFormat)).length : 0;
   return <div className="commerce-admin">
     {error && <p className="notice error" role="alert">{error}</p>}
-    <form className="panel admin-form" onSubmit={(event) => void saveShipping(event)}>
+    <form className="panel admin-form" hidden={section === "bundles"} onSubmit={(event) => void saveShipping(event)}>
       <h2>{t("ডেলিভারি ফি", "Delivery fees")}</h2>
       <p>{t("জেলার ভিত্তিতে পুরো খরচ ক্রেতাকে অর্ডার দেওয়ার আগে দেখানো হবে।", "Buyers see the exact fee and total before placing an order.")}</p>
       <div className="form-grid">
@@ -149,8 +150,9 @@ export function CommerceAdmin({ books, bundles, physicalOrders, shipping, onSucc
       </div>
       <button className="button" disabled={busy}>{t("ডেলিভারি ফি সংরক্ষণ করুন", "Save delivery fees")}</button>
     </form>
-    <section className="panel admin-form">
+    <section className="panel admin-form" hidden={section === "delivery"}>
       <h2>{t("বান্ডেল", "Bundles")}</h2>
+      <p>{t("PDF/EPUB ইবুক একসঙ্গে বিক্রি করুন অথবা আলাদা ছাপা বইয়ের বান্ডেল তৈরি করুন।", "Sell PDF/EPUB ebooks together, or create a separate printed-book bundle.")}</p>
       {bundles.length > 0 && <div className="bundle-admin-list">{bundles.map((bundle) => <div key={bundle.id} className="cart-row">
         <span><strong>{name(bundle, locale)}</strong> · {bundle.kind === "mixed" ? t("এক ধরনের বই বাছা প্রয়োজন", "Choose a single format") : bundle.kind === "physical" ? t("ছাপা বই", "Printed only") : t("ইবুক", "Ebooks only")} · <Price paisa={bundle.price_paisa} />
           {bundle.archived_at ? ` · ${t("আর্কাইভ", "Archived")}` : bundle.kind === "mixed" ? ` · ${t("বিক্রির জন্য উপলব্ধ নয়", "Unavailable for sale")}` : bundle.published ? ` · ${t("প্রকাশিত", "Published")}` : ` · ${t("খসড়া", "Draft")}`}</span>
@@ -158,10 +160,11 @@ export function CommerceAdmin({ books, bundles, physicalOrders, shipping, onSucc
           <button type="button" className="button secondary" disabled={busy} onClick={() => void archiveBundle(bundle)}>{t("আর্কাইভ", "Archive")}</button></>}
       </div>)}</div>}
       <form className="admin-form" onSubmit={(event) => void saveBundle(event)}>
-        <h3>{draft.id ? t("বান্ডেল সম্পাদনা", "Edit bundle") : t("নতুন বান্ডেল", "New bundle")}</h3>
+        <h3>{draft.id ? t("বান্ডেল সম্পাদনা", "Edit bundle") : draft.kind === "ebook" ? t("নতুন ইবুক বান্ডেল (PDF / EPUB)", "New ebook bundle (PDF / EPUB)") : t("নতুন ছাপা বইয়ের বান্ডেল", "New printed bundle")}</h3>
+        {draft.kind === "ebook" && <p className="notice">{t("অন্তত দুটি বই বাছুন যেগুলোতে PDF বা EPUB আপলোড করা আছে। ছাপা বইয়ের মজুত বা ডেলিভারি ফি লাগবে না। bKash পেমেন্ট অনুমোদনের পর ক্রেতা বান্ডেলের প্রতিটি ইবুক পাবেন।", "Choose at least two books with uploaded PDF or EPUB files. No printed stock or delivery fee is needed. After bKash approval, the buyer gets every ebook in the bundle.")}</p>}
         <div className="form-grid"><label>{t("ধরন", "Format")}<select required value={draft.kind} onChange={(event) => changeKind(event.target.value as EditionFormat)}>
           {!draft.kind && <option value="" disabled>{t("একটি ধরন বাছুন", "Choose one format")}</option>}
-          <option value="physical">{t("শুধু ছাপা বই", "Printed only")}</option><option value="ebook">{t("শুধু ইবুক", "Ebooks only")}</option></select></label>
+          <option value="ebook">{t("শুধু ইবুক (PDF / EPUB)", "Ebooks only (PDF / EPUB)")}</option><option value="physical">{t("শুধু ছাপা বই", "Printed only")}</option></select></label>
           <label>URL slug<input required pattern="[a-z0-9]+(-[a-z0-9]+)*" minLength={3} maxLength={90} value={draft.slug} onChange={(event) => setDraft({ ...draft, slug: event.target.value })} /></label></div>
         <div className="form-grid"><label>{t("নাম (বাংলা)", "Bangla title")}<input required minLength={2} maxLength={160} value={draft.title_bn} onChange={(event) => setDraft({ ...draft, title_bn: event.target.value })} /></label>
           <label>English title<input required minLength={2} maxLength={160} value={draft.title_en} onChange={(event) => setDraft({ ...draft, title_en: event.target.value })} /></label></div>
@@ -198,7 +201,7 @@ export function CommerceAdmin({ books, bundles, physicalOrders, shipping, onSucc
         {draft.id && <button className="button secondary" type="button" onClick={() => setDraft(blankBundle)}>{t("নতুন বান্ডেল শুরু করুন", "Start new bundle")}</button>}
       </form>
     </section>
-    <section className="admin-form"><h2>{t("ছাপা বইয়ের অর্ডার", "Printed-book orders")}</h2>
+    <section className="admin-form" hidden={section === "bundles"}><h2>{t("ছাপা বইয়ের অর্ডার", "Printed-book orders")}</h2>
       {!physicalOrders.length && <p className="notice">{t("এখনো কোনো অর্ডার নেই।", "No printed orders yet.")}</p>}
       {physicalOrders.map((order) => {
         const shipping = Array.isArray(order.order_shipping) ? order.order_shipping[0] : order.order_shipping;

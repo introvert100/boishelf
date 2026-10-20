@@ -233,7 +233,8 @@ export function Admin({
           ["books", "বই", "Books"],
           ["archived", "আর্কাইভ", "Archived"],
           ["orders", `অর্ডার (${claims.filter((claim) => !resolvedClaims.includes(claim.id)).length})`, `Orders (${claims.filter((claim) => !resolvedClaims.includes(claim.id)).length})`],
-          ["commerce", "ছাপা বই ও বান্ডেল", "Print, bundles & delivery"],
+          ["bundles", "বান্ডেল", "Bundles"],
+          ["commerce", "ছাপা বই ও ডেলিভারি", "Printed & delivery"],
           ["payments", "পেমেন্ট", "Payments"],
           ["policies", "নীতিমালা", "Policies"],
           ["launch", "প্রকাশের প্রস্তুতি", "Launch readiness"],
@@ -244,7 +245,7 @@ export function Admin({
             aria-pressed={tab === id}
             onClick={() => {
               setTab(id);
-              if (id === "commerce") setCommerceVisited(true);
+              if (id === "commerce" || id === "bundles") setCommerceVisited(true);
               setNotice("");
               setError("");
             }}
@@ -268,7 +269,7 @@ export function Admin({
         <button className="button secondary" type="button" disabled={busy} onClick={() => void retryCleanup()}>{t("আবার চেষ্টা করুন", "Retry cleanup")}</button>
       </div>}
       {returnToBundle && ["books", "archived"].includes(tab) && <div className="notice"><p>{t("বইয়ের সংস্করণ প্রস্তুত করে সংরক্ষণ করুন, তারপর বান্ডেলে ফিরুন। বান্ডেলের লেখা ও বাছাই রাখা হয়েছে।", "Save this book’s edition setup, then return to your bundle. Its details and selections are kept.")}</p>
-        <button type="button" className="button secondary" onClick={() => { setTab("commerce"); setReturnToBundle(false); }}>{t("বান্ডেলে ফিরুন", "Return to bundle")}</button>
+        <button type="button" className="button secondary" onClick={() => { setTab("bundles"); setReturnToBundle(false); }}>{t("বান্ডেলে ফিরুন", "Return to bundle")}</button>
       </div>}
       {tab === "books" && (
         <>
@@ -402,7 +403,8 @@ export function Admin({
           <td><button type="button" className="button secondary" disabled={busy} onClick={() => void restoreBook(book)}><RotateCcw size={16} /> {t("খসড়ায় ফিরিয়ে আনুন", "Restore as draft")}</button></td>
         </tr>)}</tbody></table>}
       </div>}
-      {commerceVisited && <div hidden={tab !== "commerce"}><CommerceAdmin books={displayBooks} bundles={bundles}
+      {commerceVisited && <div hidden={tab !== "commerce" && tab !== "bundles"}><CommerceAdmin books={displayBooks} bundles={bundles}
+        section={tab === "commerce" ? "delivery" : "bundles"}
         physicalOrders={physicalOrders} shipping={shipping} onSuccess={showToast}
         onEditBook={(book) => { setEditing(book.id); setTab(book.archived_at ? "archived" : "books"); setReturnToBundle(true); window.scrollTo({ top: 0, behavior: "smooth" }); }} /></div>}
       {tab === "payments" && <PaymentSettingsEditor settings={paymentSettings} onSuccess={showToast} />}
