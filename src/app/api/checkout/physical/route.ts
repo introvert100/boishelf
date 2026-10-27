@@ -11,6 +11,13 @@ export async function POST(request: Request) {
     const user = await requireUser();
     await rateLimit(`physical-checkout:${user.id}`, 5, 60);
     const data = physicalCheckoutInput.parse(await jsonBody(request));
+    // A retry returns the original snapshot even after its district is removed
+    // or checkout is paused. It cannot place another order or reserve stock.
+    const { data: existing, error: lookupError } = await serviceClient().from("orders")
+      .select("id").eq("user_id", user.id).eq("client_key", data.clientKey).maybeSingle();
+    if (lookupError) throw lookupError;
+    if (existing) return Response.json({ orderId: existing.id, reused: true },
+      { headers: { "Cache-Control": "private, no-store" } });
     const available = await physicalReadiness();
     if (!available[data.method === "cod" ? "cod" : "bkash"])
       throw new AppError(503, "This payment option is not available yet.");
@@ -31,6 +38,8 @@ export async function POST(request: Request) {
         throw new AppError(409, "The total changed. Refresh your cart before ordering.");
       if (error.message.includes("shipping_unconfigured"))
         throw new AppError(503, "Delivery fees are not configured yet.");
+      if (error.message.includes("district_unavailable"))
+        throw new AppError(409, "Delivery is no longer available in this district. Refresh and choose another district.");
       throw error;
     }
     return Response.json({ orderId: order.id, reused: !!order.reused },

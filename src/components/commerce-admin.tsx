@@ -1,4 +1,6 @@
 "use client";
+import { DeliverySettings } from "./delivery-settings";
+import type { DeliveryDistrict } from "@/lib/delivery-validation";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import type { Book, Bundle, EditionFormat, Order, OrderLine, OrderShipping } from "@/lib/types";
@@ -68,7 +70,7 @@ const blankBundle: BundleDraft = { slug: "", kind: "ebook", title_bn: "", title_
   description_bn: "", description_en: "", price: "", published: false, members: [] };
 export function CommerceAdmin({ books, bundles, physicalOrders, shipping, onSuccess, onEditBook, section = "all" }: {
   books: Book[]; bundles: Bundle[]; physicalOrders: PhysicalAdminOrder[];
-  shipping: { dhaka_paisa: number | null; outside_paisa: number | null };
+  shipping: DeliveryDistrict[];
   onSuccess: (message: string) => void;
   onEditBook?: (book: Book) => void;
   section?: "bundles" | "delivery" | "all";
@@ -76,21 +78,11 @@ export function CommerceAdmin({ books, bundles, physicalOrders, shipping, onSucc
   const { locale, t } = useLanguage();
   const router = useRouter();
   const [draft, setDraft] = useState<BundleDraft>(blankBundle);
-  const [dhaka, setDhaka] = useState(shipping.dhaka_paisa == null ? "" : String(shipping.dhaka_paisa / 100));
-  const [outside, setOutside] = useState(shipping.outside_paisa == null ? "" : String(shipping.outside_paisa / 100));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [targetDates, setTargetDates] = useState<Record<string, string>>({});
   const [couriers, setCouriers] = useState<Record<string, string>>({});
   const [trackings, setTrackings] = useState<Record<string, string>>({});
-  async function saveShipping(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault(); setBusy(true); setError("");
-    try {
-      await post("/api/admin/shipping", { dhakaPaisa: Math.round(Number(dhaka) * 100),
-        outsidePaisa: Math.round(Number(outside) * 100) });
-      onSuccess(t("ডেলিভারি ফি সংরক্ষিত হয়েছে।", "Delivery fees saved.")); router.refresh();
-    } catch (failure) { setError((failure as Error).message); } finally { setBusy(false); }
-  }
   async function saveBundle(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault(); setBusy(true); setError("");
     try {
@@ -141,15 +133,7 @@ export function CommerceAdmin({ books, bundles, physicalOrders, shipping, onSucc
   const eligibleCount = draft.kind ? books.filter((book) => !bundleBookIssue(book, draft.kind as EditionFormat)).length : 0;
   return <div className="commerce-admin">
     {error && <p className="notice error" role="alert">{error}</p>}
-    <form className="panel admin-form" hidden={section === "bundles"} onSubmit={(event) => void saveShipping(event)}>
-      <h2>{t("ডেলিভারি ফি", "Delivery fees")}</h2>
-      <p>{t("জেলার ভিত্তিতে পুরো খরচ ক্রেতাকে অর্ডার দেওয়ার আগে দেখানো হবে।", "Buyers see the exact fee and total before placing an order.")}</p>
-      <div className="form-grid">
-        <label>{t("ঢাকা জেলা (টাকা)", "Dhaka district (BDT)")}<input type="number" min="0" max="10000" step="0.01" required value={dhaka} onChange={(event) => setDhaka(event.target.value)} /></label>
-        <label>{t("ঢাকার বাইরে (টাকা)", "Outside Dhaka (BDT)")}<input type="number" min="0" max="10000" step="0.01" required value={outside} onChange={(event) => setOutside(event.target.value)} /></label>
-      </div>
-      <button className="button" disabled={busy}>{t("ডেলিভারি ফি সংরক্ষণ করুন", "Save delivery fees")}</button>
-    </form>
+    <div hidden={section === "bundles"}><DeliverySettings shipping={shipping} onSuccess={onSuccess} /></div>
     <section className="panel admin-form" hidden={section === "delivery"}>
       <h2>{t("বান্ডেল", "Bundles")}</h2>
       <p>{t("PDF/EPUB ইবুক একসঙ্গে বিক্রি করুন অথবা আলাদা ছাপা বইয়ের বান্ডেল তৈরি করুন।", "Sell PDF/EPUB ebooks together, or create a separate printed-book bundle.")}</p>

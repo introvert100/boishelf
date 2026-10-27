@@ -24,11 +24,3 @@ export function bkashNumber() {
   const number = (process.env.BKASH_RECEIVE_NUMBER || "").trim();
   return /^01[3-9]\d{8}$/.test(number) ? number : null;
 }
-export function manualCheckoutEnabled() {
-  return process.env.MANUAL_BKASH_ENABLED === "true" &&
-    process.env.BKASH_BUSINESS_ACCOUNT_CONFIRMED === "true";
-}
-export function codCheckoutEnabled() {
-  return process.env.COD_ENABLED === "true" &&
-    process.env.COD_COURIER_CONFIRMED === "true";
-}

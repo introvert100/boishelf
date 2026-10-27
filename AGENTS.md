@@ -37,6 +37,8 @@ New bundles contain only printed books or only ebooks; never combine editions. R
 
 Keep per-book edition edits and unfinished bundle selections when navigating to book setup. Admin → Payments stores the receiving number service-only; it overrides the environment bootstrap value for new orders. Preserve existing order number snapshots and checkout gates; never fall back to an old number on a settings read failure.
 
+Keep delivery districts service-only and require server/database fee lookup; new setups offer Dhaka only. Removed districts cannot receive new orders. Preserve historical order fees and idempotent retries. Admin → Payments owns payment switches and attestations; never bypass policies, stock, approval, or cash collection.
+
 Keep Admin → Bundles easy to find, defaulting to ebooks (PDF/EPUB); place delivery settings and fulfillment under Printed & delivery. Switching these sections must preserve the unfinished bundle.
 
 1. **Describe the failure.** Record route/action, exact message, timestamp, environment, account role, and reproduction steps. Separate symptoms from hypotheses.

@@ -59,7 +59,7 @@ test("PostgreSQL migration, access policies and atomic payment transitions", asy
     }>(
       "select relname,relrowsecurity from pg_class join pg_namespace on pg_namespace.oid=relnamespace where nspname='public' and relkind='r'",
     );
-    assert.equal(rows.length, 22);
+    assert.equal(rows.length, 23);
     assert.ok(rows.every((r) => r.relrowsecurity));
   });
   await t.test("payment settings are service-only with validated number and owner audit", async () => {
@@ -77,6 +77,32 @@ test("PostgreSQL migration, access policies and atomic payment transitions", asy
     });
     await assert.rejects(db.query("update payment_settings set receiving_number='invalid'"));
     assert.equal((await db.query<{ receiving_number: string | null }>("select receiving_number from payment_settings")).rows[0].receiving_number, null);
+  });
+  await t.test("delivery starts Dhaka-only; owner replacements are atomic and service-only", async () => {
+    assert.deepEqual((await db.query("select district,fee_paisa from delivery_districts")).rows, [{district:"Dhaka",fee_paisa:5000}]);
+    for (const role of ["anon","authenticated"]) {
+      await assert.rejects(asRole(role,reader,() => db.query("select * from delivery_districts")));
+      await assert.rejects(asRole(role,reader,() => db.query("delete from delivery_districts")));
+      await assert.rejects(asRole(role,reader,() => db.query("select save_delivery_districts('[]',$1)",[reader])));
+      await assert.rejects(asRole(role,reader,() => db.query("update payment_settings set cod_enabled=true")));
+    }
+    const rates = [{district:"Dhaka",fee_paisa:5000},{district:"Gazipur",fee_paisa:8000}];
+    await asRole("service_role",null,async () => {
+      await db.query("select save_delivery_districts($1::jsonb,$2)",[JSON.stringify(rates),reader]);
+      assert.deepEqual((await db.query("select district,fee_paisa from delivery_districts order by district")).rows,rates);
+    });
+    for (const invalid of [[rates[0],rates[0]], [{district:"Fake",fee_paisa:50}], [{district:"Dhaka",fee_paisa:-1}],
+      [{district:"Dhaka",fee_paisa:1000001}], [{district:"Dhaka",fee_paisa:1.5}], [{district:"Dhaka"}], null, {}]) {
+      await assert.rejects(db.query("select save_delivery_districts($1::jsonb,$2)",[JSON.stringify(invalid),reader]));
+      assert.deepEqual((await db.query("select district,fee_paisa from delivery_districts")).rows,[{district:"Dhaka",fee_paisa:5000}]);
+    }
+    await asRole("service_role",null,async () => {
+      await db.query("select save_delivery_districts('[]',$1)",[reader]);
+      assert.equal((await db.query("select * from delivery_districts")).rows.length,0);
+    });
+    const switches=(await db.query<{bkash_enabled:boolean;cod_enabled:boolean;business_confirmed:boolean|null}>("select * from payment_settings")).rows[0];
+    assert.equal(switches.bkash_enabled,true); assert.equal(switches.cod_enabled,true);
+    assert.equal(switches.business_confirmed,null);
   });
   await t.test("free-tier ebook bucket accepts 50 MB files and remains private", async () => {
     const { rows } = await db.query<{ file_size_limit: number; public: boolean }>(
@@ -539,7 +565,7 @@ test("PostgreSQL migration, access policies and atomic payment transitions", asy
     }
     await db.query("select save_print_edition($1,$2,1000,2,'Received copies')", [first, reader]);
     await db.query("select save_print_edition($1,$2,1200,1,'Received copies')", [second, reader]);
-    await db.query("update shipping_settings set dhaka_paisa=500,outside_paisa=900 where id='default'");
+    await db.query("select save_delivery_districts($1::jsonb,$2)", [JSON.stringify([{district:"Dhaka",fee_paisa:500}]), reader]);
     const bundle = (await db.query<{ id: string }>(`select save_bundle(null,'print-pair','physical','জোড়া','Print pair',
       'দুটি ছাপা বই','Two printed books',1500,true,array[$1,$2]::uuid[]) as id`, [first, second])).rows[0].id;
     const lines = JSON.stringify([{ kind: "book", id: first, quantity: 1 }, { kind: "bundle", id: bundle, quantity: 1 }]);
@@ -550,6 +576,13 @@ test("PostgreSQL migration, access policies and atomic payment transitions", asy
     const params = [reader, key, lines, "Reader Name", "01712345678", "Dhaka", "Dhanmondi", "House 1 Road 2", "cod", null, 3000];
     const order = (await db.query<{ v: { id: string; amount_paisa: number; reused: boolean; status: string } }>(
       "select create_physical_order($1,$2,$3::jsonb,$4,$5,$6,$7,$8,$9,$10,$11) as v", params)).rows[0].v;
+    // Changing/removing a delivery district never changes a purchased fee or retry.
+    await db.query("select save_delivery_districts($1::jsonb,$2)", [JSON.stringify([{district:"Gazipur",fee_paisa:700}]), reader]);
+    assert.equal((await db.query<{shipping_fee_paisa:number}>("select shipping_fee_paisa from order_shipping where order_id=$1",[order.id])).rows[0].shipping_fee_paisa,500);
+    assert.equal((await db.query<{v:{reused:boolean}}>("select create_physical_order($1,$2,$3::jsonb,$4,$5,$6,$7,$8,$9,$10,$11) as v",params)).rows[0].v.reused,true);
+    await assert.rejects(db.query("select create_physical_order($1,$2,$3::jsonb,$4,$5,$6,$7,$8,$9,$10,$11)",
+      [reader,"aaaa1111-1111-4111-8111-111111111111",lines,...params.slice(3)]),/district_unavailable/);
+    await db.query("select save_delivery_districts($1::jsonb,$2)", [JSON.stringify([{district:"Dhaka",fee_paisa:500}]), reader]);
     assert.equal(order.amount_paisa, 3000);
     assert.equal(order.status, "pending");
     await db.query(`select save_bundle($1,'print-pair','physical','জোড়া','Print pair',
@@ -588,6 +621,19 @@ test("PostgreSQL migration, access policies and atomic payment transitions", asy
     await assert.rejects(db.query("select create_physical_order($1,$2,$3::jsonb,$4,$5,$6,$7,$8,$9,$10,$11)",
       [...params.slice(0, 10), 1600]), /price_changed/);
     assert.equal((await db.query("select * from orders where client_key=$1", [params[1]])).rows.length, 0);
+    // Only configured districts are accepted; the database recalculates the fee.
+    await db.query("select save_delivery_districts($1::jsonb,$2)", [JSON.stringify([
+      {district:"Dhaka",fee_paisa:500},{district:"Gazipur",fee_paisa:900},{district:"Sylhet",fee_paisa:0}]),reader]);
+    const query = "select create_physical_order($1,$2,$3::jsonb,$4,$5,$6,$7,$8,$9,$10,$11) as v";
+    await assert.rejects(db.query(query,[...params.slice(0,5),"Chattogram",...params.slice(6)]),/district_unavailable/);
+    await assert.rejects(db.query(query,[...params.slice(0,5),"Gazipur",...params.slice(6)]),/price_changed/);
+    assert.equal((await db.query<{reserved:number}>("select reserved from print_editions where book_id=$1",[printBook])).rows[0].reserved,0);
+    const outsideParams=[...params.slice(0,5),"Gazipur",...params.slice(6,10),1900];
+    const outside=(await db.query<{v:{id:string;amount_paisa:number}}>(query,outsideParams)).rows[0].v;
+    assert.equal(outside.amount_paisa,1900);
+    await db.query("select change_physical_order($1,$2,'cancel')",[outside.id,reader]);
+    // A new idempotency key starts a separate order after cancellation.
+    params[1]="abababab-3333-4333-8333-abababababab";
     const order = (await db.query<{ v: { id: string; status: string } }>(
       "select create_physical_order($1,$2,$3::jsonb,$4,$5,$6,$7,$8,$9,$10,$11) as v", params)).rows[0].v;
     await assert.rejects(db.query("select change_physical_order($1,$2,'ship',null,'Courier','TRACK1',null)",
@@ -660,8 +706,21 @@ test("PostgreSQL migration, access policies and atomic payment transitions", asy
     const create = async (key: string, method = "cod", user = reader) => (await db.query<{ v: { id: string; reused: boolean } }>(
       "select create_physical_order($1,$2,$3::jsonb,'Fixture Reader','01712345678','Dhaka','Test area','Test street',$4,$5,3500) as v",
       [user,key,lines,method,method === "cod" ? null : "01812345678"])).rows[0].v;
+    // Seed historical orders using the original RPC, then exercise fulfillment
+    // with today's implementation. New mixed checkout remains forbidden.
+    const previousSql = readFileSync("supabase/migrations/20261017102902_mixed_bundles.sql", "utf8");
+    const oldCreate = previousSql.slice(previousSql.indexOf("create or replace function public.create_physical_order("), previousSql.indexOf("create or replace function public.create_ebook_bundle_order("));
+    const newSql = readFileSync("supabase/migrations/20261027160200_district_delivery_checkout_controls.sql", "utf8");
+    const newCreate = newSql.slice(newSql.indexOf("create or replace function public.create_physical_order("));
+    await db.query("update shipping_settings set dhaka_paisa=500,outside_paisa=900 where id='default'");
+    const createLegacy = async (key: string, method = "cod", user = reader) => {
+      await db.exec(oldCreate);
+      try { return await create(key,method,user); }
+      finally { await db.exec(newCreate); }
+    };
+    await assert.rejects(create("99999999-1111-4111-8111-111111111111"), /bundle_unavailable/);
     const key = "16161616-1616-4161-8161-161616161616";
-    const order = await create(key);
+    const order = await createLegacy(key);
     assert.equal((await create(key)).reused, true);
     assert.equal((await db.query<{ reserved: number }>("select reserved from print_editions where book_id=$1", [ids[0]])).rows[0].reserved, 1);
     assert.equal((await db.query("select * from print_editions where book_id=$1", [ids[1]])).rows.length, 0);
@@ -688,7 +747,7 @@ test("PostgreSQL migration, access policies and atomic payment transitions", asy
     // Restore mixed definition for payment/cancellation checks.
     await db.query(`select save_bundle_v2($1,'mixed-pair','mixed','মিশ্র','Mixed pair','বইয়ের বান্ডেল',
       'Book bundle',3000,true,$2::jsonb)`, [bundle, members]);
-    const prepaid = await create("17171717-1717-4171-8171-171717171717", "bkash_manual", other);
+    const prepaid = await createLegacy("17171717-1717-4171-8171-171717171717", "bkash_manual", other);
     await db.query("select submit_manual_claim($1,$2,'MIXED123','1234')", [other, prepaid.id]);
     const claim = (await db.query<{ id: string }>("select id from manual_payment_claims where order_id=$1", [prepaid.id])).rows[0].id;
     await db.query("select approve_manual_claim($1,$2,$3)", [prepaid.id,claim,reader]);
@@ -697,7 +756,7 @@ test("PostgreSQL migration, access policies and atomic payment transitions", asy
     await db.query("select change_physical_order($1,$2,'cancel_paid')", [prepaid.id,reader]);
     assert.equal((await db.query("select * from entitlements where order_id=$1 and revoked_at is null", [prepaid.id])).rows.length, 0);
     assert.equal((await db.query<{ reserved: number }>("select reserved from print_editions where book_id=$1", [ids[0]])).rows[0].reserved, 0);
-    const cancelled = await create("18181818-1818-4181-8181-181818181818");
+    const cancelled = await createLegacy("18181818-1818-4181-8181-181818181818");
     await db.query("select change_physical_order($1,$2,'cancel')", [cancelled.id,reader]);
     assert.equal((await db.query("select * from entitlements where order_id=$1", [cancelled.id])).rows.length, 0);
     await assert.rejects(db.query(`select save_bundle_v2(null,'invalid-mixed','mixed','মিশ্র','Mixed','বইয়ের বান্ডেল',
@@ -706,7 +765,7 @@ test("PostgreSQL migration, access policies and atomic payment transitions", asy
     await db.query("select submit_manual_claim($1,$2,'SEPARATE123','1234')", [other,separate.id]);
     const separateClaim = (await db.query<{ id: string }>("select id from manual_payment_claims where order_id=$1", [separate.id])).rows[0].id;
     await db.query("select approve_manual_claim($1,$2,$3)", [separate.id,separateClaim,reader]);
-    const again = await create("19191919-1919-4191-8191-191919191919", "bkash_manual", other);
+    const again = await createLegacy("19191919-1919-4191-8191-191919191919", "bkash_manual", other);
     await db.query("select submit_manual_claim($1,$2,'MIXEDAGAIN','1234')", [other,again.id]);
     const againClaim = (await db.query<{ id: string }>("select id from manual_payment_claims where order_id=$1", [again.id])).rows[0].id;
     await db.query("select approve_manual_claim($1,$2,$3)", [again.id,againClaim,reader]);

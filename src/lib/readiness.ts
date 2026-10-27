@@ -1,11 +1,11 @@
 import "server-only";
-import { hasSupabase, manualCheckoutEnabled, ownerEmail } from "./config";
+import { hasSupabase, ownerEmail } from "./config";
 import { paymentSettings } from "./payment-settings";
 import { serviceClient } from "./supabase";
 import { policySlugs } from "./types";
 
 export async function readiness() {
-  const { receivingNumber } = await paymentSettings();
+  const { receivingNumber, checkout } = await paymentSettings();
   let policies = false;
   let realCatalogue = false;
   if (hasSupabase()) {
@@ -22,11 +22,11 @@ export async function readiness() {
   }
   const gates = [
     { key: "owner", label: "Owner Gmail configured", passed: /^[^@\s]+@gmail\.com$/.test(ownerEmail()) },
-    { key: "account", label: "Eligible bKash business account confirmed", passed: process.env.BKASH_BUSINESS_ACCOUNT_CONFIRMED === "true" },
+    { key: "account", label: "Eligible bKash business account confirmed in Admin → Payments", passed: checkout.businessConfirmed },
     { key: "number", label: "bKash receiving number configured in Admin → Payments", passed: !!receivingNumber },
     { key: "policies", label: "Four policies published in both languages", passed: policies },
     { key: "catalogue", label: "Real catalogue with downloadable files", passed: realCatalogue },
-    { key: "enabled", label: "Manual bKash checkout enabled", passed: manualCheckoutEnabled() },
+    { key: "enabled", label: "Manual bKash checkout enabled in Admin → Payments", passed: checkout.bkashEnabled },
   ];
   return { ready: gates.every((gate) => gate.passed), gates };
 }

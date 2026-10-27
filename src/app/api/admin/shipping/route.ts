@@ -1,20 +1,18 @@
-import { z } from "zod";
+import { deliverySettingsInput } from "@/lib/delivery-validation";
 import { requireOwner } from "@/lib/auth";
 import { serviceClient } from "@/lib/supabase";
 import { apiError, checkOrigin, jsonBody, rateLimit } from "@/lib/http";
 
-const input = z.object({ dhakaPaisa: z.number().int().min(0).max(1000000),
-  outsidePaisa: z.number().int().min(0).max(1000000) });
 export async function POST(request: Request) {
   try {
     checkOrigin(request);
     const owner = await requireOwner();
     await rateLimit(`shipping-settings:${owner.id}`, 10, 60);
-    const data = input.parse(await jsonBody(request));
-    const { error } = await serviceClient().from("shipping_settings")
-      .update({ dhaka_paisa: data.dhakaPaisa, outside_paisa: data.outsidePaisa,
-        updated_at: new Date().toISOString() }).eq("id", "default");
+    const data = deliverySettingsInput.parse(await jsonBody(request));
+    const { error } = await serviceClient().rpc("save_delivery_districts", {
+      p_districts: data.districts, p_owner: owner.id,
+    });
     if (error) throw error;
-    return Response.json({ ok: true });
+    return Response.json({ ok: true }, { headers: { "Cache-Control": "private, no-store" } });
   } catch (error) { return apiError(error, "shipping_settings_failed"); }
 }

@@ -2543,3 +2543,6 @@ td a {
   .cart-row { align-items: flex-end; }
   .order-list-item strong { flex-basis: 100%; }
 }
+
+.delivery-district-row { display: flex; align-items: end; gap: 1rem; flex-wrap: wrap; }
+.delivery-district-row label { flex: 1; min-width: min(100%, 12rem); }

@@ -13,6 +13,9 @@ import {
 import { useLanguage, Price, statusLabel } from "./store";
 import { BookEditor } from "./book-editor";
 import { CommerceAdmin, PrintEditionEditor } from "./commerce-admin";
+import { CheckoutSettings } from "./checkout-settings";
+import { closedCheckout } from "@/lib/checkout-controls";
+import type { DeliveryDistrict } from "@/lib/delivery-validation";
 import { PaymentSettingsEditor } from "./payment-settings";
 import type { PaymentSettings } from "@/lib/payment-validation";
 import { SuccessToast, type ToastMessage } from "./success-toast";
@@ -42,7 +45,7 @@ export function Admin({
   cleanupPending: number;
   bundles: Bundle[];
   physicalOrders: (Order & { order_shipping: OrderShipping | OrderShipping[] | null; order_items: OrderLine[] })[];
-  shipping: { dhaka_paisa: number | null; outside_paisa: number | null };
+  shipping: DeliveryDistrict[];
   physicalGates: Gate[];
   paymentSettings: PaymentSettings;
 }) {
@@ -407,7 +410,7 @@ export function Admin({
         section={tab === "commerce" ? "delivery" : "bundles"}
         physicalOrders={physicalOrders} shipping={shipping} onSuccess={showToast}
         onEditBook={(book) => { setEditing(book.id); setTab(book.archived_at ? "archived" : "books"); setReturnToBundle(true); window.scrollTo({ top: 0, behavior: "smooth" }); }} /></div>}
-      {tab === "payments" && <PaymentSettingsEditor settings={paymentSettings} onSuccess={showToast} />}
+      {tab === "payments" && <><PaymentSettingsEditor settings={paymentSettings} onSuccess={showToast} /><CheckoutSettings initial={paymentSettings.checkout || closedCheckout} gates={gates} physicalGates={physicalGates} onSuccess={showToast} /></>}
       {tab === "orders" && (
         <>
           <p>

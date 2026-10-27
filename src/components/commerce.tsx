@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { BookOpen, Package, ShoppingCart, Truck } from "lucide-react";
 import { addToCart, readCart, saveCart } from "@/lib/cart";
-import { districts } from "@/lib/commerce-validation";
+import type { DeliveryDistrict } from "@/lib/delivery-validation";
 import { bundleIsAvailable, printedBundleMembers } from "@/lib/bundle-selection";
 import type { Book, Bundle, CartLine, Order, OrderLine, OrderShipping, Viewer } from "@/lib/types";
 import { Cover, Price, statusLabel, useLanguage } from "./store";
@@ -116,8 +116,9 @@ export function BundleDetail({ bundle, viewer, ebookReady }: { bundle: Bundle; v
 
 type Quote = { items: (CartLine & { title_bn: string; title_en: string; unit_price_paisa: number })[];
   subtotal_paisa: number; shipping_fee_paisa: number; total_paisa: number };
-export function PhysicalCart({ books, bundles, viewer, ready }: {
+export function PhysicalCart({ books, bundles, viewer, ready, deliveryDistricts }: {
   books: Book[]; bundles: Bundle[]; viewer: Viewer; ready: { cod: boolean; bkash: boolean };
+  deliveryDistricts: DeliveryDistrict[];
 }) {
   const { locale, t } = useLanguage();
   const [lines, setLines] = useState<CartLine[]>([]);
@@ -200,8 +201,9 @@ export function PhysicalCart({ books, bundles, viewer, ready }: {
           <label>{t("বাংলাদেশি মোবাইল নম্বর", "Bangladesh mobile number")}<input name="phone" required inputMode="tel" pattern="01[3-9][0-9]{8}" placeholder="01XXXXXXXXX" autoComplete="tel" /></label>
           <label>{t("জেলা", "District")}<select value={district} required onChange={(event) => setDistrict(event.target.value)}>
             <option value="">{t("জেলা বেছে নিন", "Choose district")}</option>
-            {districts.map((name) => <option value={name} key={name}>{name}</option>)}
+            {deliveryDistricts.map(({district: name}) => <option value={name} key={name}>{name === "Dhaka" ? t("ঢাকা", "Dhaka") : name}</option>)}
           </select></label>
+          {!deliveryDistricts.length && <p className="notice">{t("এই মুহূর্তে কোনো জেলায় ডেলিভারি নেই।", "No delivery districts are available right now.")}</p>}
           <label>{t("এলাকা / উপজেলা", "Area / upazila")}<input name="localArea" required minLength={2} maxLength={120} autoComplete="address-level2" /></label>
           <label>{t("বাড়ি, রাস্তা ও সম্পূর্ণ ঠিকানা", "House, road and full address")}<textarea name="streetAddress" required minLength={5} maxLength={300} autoComplete="street-address" /></label>
           <fieldset className="payment-choices"><legend>{t("পেমেন্ট পদ্ধতি", "Payment method")}</legend>

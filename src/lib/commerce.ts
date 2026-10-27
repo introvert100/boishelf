@@ -1,6 +1,6 @@
 import "server-only";
 import { serviceClient } from "./supabase";
-import { codCheckoutEnabled, manualCheckoutEnabled, ownerEmail } from "./config";
+import { ownerEmail } from "./config";
 import { paymentSettings } from "./payment-settings";
 import { getBooks } from "./catalog";
 import { getBundles } from "./bundles";
@@ -8,16 +8,17 @@ import { cartInput, districts } from "./commerce-validation";
 import { AppError } from "./http";
 import { printedBundleMembers } from "./bundle-selection";
 import type { CartLine } from "./types";
+import { deliveryDistrictInput, deliveryFee } from "./delivery-validation";
 
 export async function shippingRates() {
-  const { data, error } = await serviceClient().from("shipping_settings")
-    .select("dhaka_paisa,outside_paisa").eq("id", "default").single();
+  const { data, error } = await serviceClient().from("delivery_districts")
+    .select("district,fee_paisa").order("district");
   if (error) throw error;
-  return data as { dhaka_paisa: number | null; outside_paisa: number | null };
+  return deliveryDistrictInput.array().parse(data);
 }
 
 export async function physicalReadiness() {
-  const { receivingNumber } = await paymentSettings();
+  const { receivingNumber, checkout } = await paymentSettings();
   const db = serviceClient();
   const [{ data: policies, error: policyError }, rates, { data: stock, error: stockError }] = await Promise.all([
     db.from("policies").select("slug,body_bn,body_en").eq("published", true),
@@ -36,16 +37,17 @@ export async function physicalReadiness() {
     return book?.published && !book.is_demo && !book.archived_at && item.on_hand > item.reserved;
   });
   const baseReady = /^[^@\s]+@gmail\.com$/.test(ownerEmail()) && policyReady &&
-    catalogueReady && rates.dhaka_paisa !== null && rates.outside_paisa !== null;
+    catalogueReady && rates.length > 0;
   return {
-    cod: baseReady && codCheckoutEnabled(),
-    bkash: baseReady && manualCheckoutEnabled() && !!receivingNumber,
+    cod: baseReady && checkout.codEnabled && checkout.courierConfirmed,
+    bkash: baseReady && checkout.bkashEnabled && checkout.businessConfirmed && !!receivingNumber,
     gates: [
-      { key: "courier", label: "COD-capable courier confirmed", passed: process.env.COD_COURIER_CONFIRMED === "true" },
-      { key: "shipping", label: "Dhaka and outside-Dhaka fees configured", passed: rates.dhaka_paisa !== null && rates.outside_paisa !== null },
+      { key: "owner", label: "Owner Gmail configured", passed: /^[^@\s]+@gmail\.com$/.test(ownerEmail()) },
+      { key: "courier", label: "COD-capable courier confirmed in Admin → Payments", passed: checkout.courierConfirmed },
+      { key: "shipping", label: "At least one delivery district with a fee", passed: rates.length > 0 },
       { key: "shipping_policy", label: "Shipping and customer policies published", passed: policyReady },
       { key: "stock", label: "Published printed book in stock", passed: catalogueReady },
-      { key: "cod", label: "COD checkout enabled", passed: codCheckoutEnabled() },
+      { key: "cod", label: "COD checkout enabled in Admin → Payments", passed: checkout.codEnabled },
     ],
   };
 }
@@ -75,8 +77,8 @@ export async function quotePhysicalCart(linesInput: unknown, district: string) {
     if (!book || (book.print_on_hand || 0) - (book.print_reserved || 0) < quantity)
       throw new AppError(409, "A printed book in your cart is out of stock. Change the quantity and retry.");
   }
-  const fee = district === "Dhaka" ? rates.dhaka_paisa : rates.outside_paisa;
-  if (fee === null) throw new AppError(503, "Delivery fees are not configured yet.");
+  const fee = deliveryFee(rates, district);
+  if (fee === null) throw new AppError(409, "Delivery is not available in this district. Refresh and choose an available district.");
   return { items, subtotal_paisa: subtotal, shipping_fee_paisa: fee,
     total_paisa: subtotal + fee, district };
 }
